@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师看板 MVP - 终版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f9;
+        }
+        :root {
+            --theme-purple: #512D6D;
+            --theme-purple-light: #f3eef7;
+        }
+        .theme-purple-text { color: var(--theme-purple); }
+        .theme-purple-border { border-color: var(--theme-purple); }
+        .theme-purple-bg { background-color: var(--theme-purple); }
+        
+        .card {
+            background-color: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07);
+            transform: translateY(-2px);
+        }
+        .info-icon, .status-tag {
+            cursor: pointer;
+            position: relative;
+        }
+        .tooltip {
+            visibility: hidden;
+            width: 220px;
+            background-color: #333;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 8px 12px;
+            position: absolute;
+            z-index: 10;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -110px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.8rem;
+            font-weight: normal;
+            line-height: 1.5;
+        }
+        .info-icon:hover .tooltip, .status-tag:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .sortable:hover {
+            cursor: pointer;
+            background-color: #f9fafb;
+        }
+        .tab-button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            color: #6b7280;
+            transition: all 0.2s;
+        }
+        .tab-button.active {
+            color: var(--theme-purple);
+            background-color: var(--theme-purple-light);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="min-h-screen p-4 md:p-6">
+        <!-- 页面头部 -->
+        <header class="flex flex-wrap justify-between items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">教师看板</h1>
+                <p class="text-gray-500">课程：产品经理的必修课 | 班级：PM007期</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center text-gray-600 bg-white px-3 py-2 rounded-lg shadow-sm">
+                    <i data-lucide="clock" class="w-5 h-5 mr-2 theme-purple-text"></i>
+                    <span id="current-time"></span>
+                </div>
+                <button class="theme-purple-bg text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:opacity-90 transition flex items-center">
+                    <i data-lucide="log-out" class="w-4 h-4 mr-2"></i>
+                    结束授课
+                </button>
+            </div>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="lg:col-span-2 flex flex-col gap-6">
+                
+                <!-- 模块一：课堂节奏仪表盘 -->
+                <section class="card">
+                    <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
+                        <i data-lucide="gauge-circle" class="w-6 h-6 mr-2 theme-purple-text"></i>
+                        课堂节奏仪表盘
+                    </h2>
+                    <p class="text-sm text-gray-500 mb-6">实时洞察班级整体学习状态</p>
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                        <div class="bg-purple-50 border-l-4 theme-purple-border p-4 rounded-lg">
+                            <p class="text-sm text-gray-500 flex items-center">平均进度 <span class="info-icon ml-1"><i data-lucide="info" class="w-3 h-3"><span class="tooltip">全班学生所在PPT页码的平均值</span></i></span></p>
+                            <p class="text-2xl font-bold theme-purple-text">18 / 50 页</p>
+                        </div>
+                        <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
+                            <p class="text-sm text-gray-500 flex items-center">整体正确率 <span class="info-icon ml-1"><i data-lucide="info" class="w-3 h-3"><span class="tooltip">所有已作答【客观题】的总正确数 / 总作答数</span></i></span></p>
+                            <p class="text-2xl font-bold text-green-600">82%</p>
+                        </div>
+                        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+                            <p class="text-sm text-gray-500 flex items-center">总互动次数 <span class="info-icon ml-1"><i data-lucide="info" class="w-3 h-3"><span class="tooltip">学生完成测验、参与讨论的总次数</span></i></span></p>
+                            <p class="text-2xl font-bold text-blue-600">345 次</p>
+                        </div>
+                        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg">
+                            <p class="text-sm text-gray-500 flex items-center">求助指数 <span class="info-icon ml-1"><i data-lucide="info" class="w-3 h-3"><span class="tooltip">学生在AI答疑区主动提问的总次数</span></i></span></p>
+                            <p class="text-2xl font-bold text-yellow-600">21 次</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="font-semibold text-gray-700 mb-2">学习进度分布</h3>
+                        <div class="h-64">
+                            <canvas id="progressChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 模块三：内容难点洞察 (Tab版) -->
+                <section class="card">
+                     <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
+                        <i data-lucide="siren" class="w-6 h-6 mr-2 theme-purple-text"></i>
+                        内容难点洞察
+                    </h2>
+                    <p class="text-sm text-gray-500 mb-4">快速定位课程中的知识与讨论难点</p>
+                    
+                    <!-- Tab 按钮 -->
+                    <div class="border-b border-gray-200 mb-4">
+                        <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                            <button onclick="changeTab(event, 'objective')" class="tab-button active">客观题难点</button>
+                            <button onclick="changeTab(event, 'subjective')" class="tab-button">主观题提醒</button>
+                            <button onclick="changeTab(event, 'discussion')" class="tab-button">讨论质量</button>
+                        </nav>
+                    </div>
+
+                    <!-- Tab 内容 -->
+                    <div>
+                        <div id="objective" class="tab-content active">
+                            <h3 class="font-semibold text-gray-700 mb-4 text-base">错误率最高的客观题</h3>
+                            <ol class="space-y-3">
+                                <li class="p-4 rounded-lg border border-red-200 bg-red-50/50">
+                                    <div class="flex justify-between items-center">
+                                        <span class="flex items-center text-sm font-semibold text-red-600"><i data-lucide="check-square" class="w-4 h-4 mr-2"></i>Top 1 / 错误率: 75%</span>
+                                        <span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">选择题</span>
+                                    </div>
+                                    <p class="font-medium text-gray-800 mt-2 pl-6">P8 - 市场定位四要素是什么？</p>
+                                </li>
+                                <li class="p-4 rounded-lg border border-orange-200 bg-orange-50/50">
+                                     <div class="flex justify-between items-center">
+                                        <span class="flex items-center text-sm font-semibold text-orange-600"><i data-lucide="toggle-right" class="w-4 h-4 mr-2"></i>Top 2 / 错误率: 61%</span>
+                                        <span class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">判断题</span>
+                                    </div>
+                                    <p class="font-medium text-gray-800 mt-2 pl-6">P15 - 关于MVP的定义，哪个是错误的？</p>
+                                </li>
+                            </ol>
+                        </div>
+                        <div id="subjective" class="tab-content">
+                            <h3 class="font-semibold text-gray-700 mb-4 text-base">平均耗时最长的主观题</h3>
+                             <ol class="space-y-3">
+                                <li class="p-4 rounded-lg border border-blue-200 bg-blue-50/50">
+                                    <div class="flex justify-between items-center">
+                                        <span class="flex items-center text-sm font-semibold text-blue-600"><i data-lucide="message-square" class="w-4 h-4 mr-2"></i>耗时最长 / 平均 3分45秒</span>
+                                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">简答题</span>
+                                    </div>
+                                    <p class="font-medium text-gray-800 mt-2 pl-6">P25 - 请为你的产品设计一个增长飞轮</p>
+                                </li>
+                            </ol>
+                        </div>
+                        <div id="discussion" class="tab-content">
+                            <h3 class="font-semibold text-gray-700 mb-4 text-base">讨论质量快照 (按平均发言字数)</h3>
+                            <div class="space-y-3">
+                                <div class="p-4 border rounded-lg flex items-center gap-4">
+                                    <div class="relative w-16 h-16">
+                                        <svg class="w-full h-full" viewBox="0 0 36 36"><path class="text-gray-200" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path><path class="text-red-500" stroke-dasharray="36, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3" stroke-linecap="round"></path></svg>
+                                        <div class="absolute inset-0 flex items-center justify-center"><span class="text-lg font-bold text-red-500">18</span></div>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-gray-800">讨论一：什么是好产品？</p>
+                                        <p class="text-sm text-gray-500">平均发言: <span class="font-semibold">18字</span> (目标: >20字)</p>
+                                    </div>
+                                </div>
+                                <div class="p-4 border rounded-lg flex items-center gap-4">
+                                     <div class="relative w-16 h-16">
+                                        <svg class="w-full h-full" viewBox="0 0 36 36"><path class="text-gray-200" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path><path class="text-green-500" stroke-dasharray="85, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3" stroke-linecap="round"></path></svg>
+                                        <div class="absolute inset-0 flex items-center justify-center"><span class="text-lg font-bold text-green-500">85</span></div>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-gray-800">讨论二：分析案例A优缺点</p>
+                                        <p class="text-sm text-gray-500">平均发言: <span class="font-semibold">85字</span> (目标: >50字)</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- 右侧栏：模块二 -->
+            <div class="card lg:col-span-1 flex flex-col">
+                <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
+                    <i data-lucide="users" class="w-6 h-6 mr-2 theme-purple-text"></i>
+                    学生个体清单
+                </h2>
+                <div class="relative mb-4">
+                    <input type="text" id="studentSearch" onkeyup="filterStudents()" class="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300" placeholder="搜索学生姓名...">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
+                </div>
+                <div class="flex-grow overflow-y-auto">
+                    <table id="studentTable" class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                            <tr>
+                                <th scope="col" class="px-3 py-3 sortable" onclick="sortTable(0)">姓名 <i data-lucide="arrow-up-down" class="inline w-3 h-3"></i></th>
+                                <th scope="col" class="px-2 py-3 sortable" onclick="sortTable(1)">进度 <i data-lucide="arrow-up-down" class="inline w-3 h-3"></i></th>
+                                <th scope="col" class="px-2 py-3 sortable" onclick="sortTable(2)">得分 <i data-lucide="arrow-up-down" class="inline w-3 h-3"></i></th>
+                                <th scope="col" class="px-3 py-3">状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody">
+                            <tr class="bg-white border-b hover:bg-gray-50">
+                                <td class="px-3 py-3 font-medium text-gray-900">张三</td>
+                                <td class="px-2 py-3" data-sort="18">18/50</td>
+                                <td class="px-2 py-3" data-sort="85">85%</td>
+                                <td class="px-3 py-3"></td>
+                            </tr>
+                            <tr class="bg-white border-b hover:bg-gray-50">
+                                <td class="px-3 py-3 font-medium text-gray-900">李四</td>
+                                <td class="px-2 py-3" data-sort="5">5/50</td>
+                                <td class="px-2 py-3" data-sort="70">70%</td>
+                                <td class="px-3 py-3 whitespace-nowrap">
+                                    <span class="status-tag bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                        进度落后
+                                        <span class="tooltip">当前进度(5/50)显著低于班级平均进度(18/50)。</span>
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr class="bg-white border-b hover:bg-gray-50">
+                                <td class="px-3 py-3 font-medium text-gray-900">王五</td>
+                                <td class="px-2 py-3" data-sort="35">35/50</td>
+                                <td class="px-2 py-3" data-sort="95">95%</td>
+                                <td class="px-3 py-3 whitespace-nowrap">
+                                    <span class="status-tag bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                        一马当先
+                                        <span class="tooltip">当前进度(35/50)显著高于班级平均进度(18/50)。</span>
+                                    </span>
+                                </td>
+                            </tr>
+                             <tr class="bg-white border-b hover:bg-gray-50">
+                                <td class="px-3 py-3 font-medium text-gray-900">赵六</td>
+                                <td class="px-2 py-3" data-sort="8">8/50</td>
+                                <td class="px-2 py-3" data-sort="40">40%</td>
+                                <td class="px-3 py-3 whitespace-nowrap">
+                                    <span class="status-tag bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                        遇到困难
+                                        <span class="tooltip">该生在 P8 测验题上停留超过3分钟，且连续答错2次。</span>
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        function updateTime() {
+            const timeElement = document.getElementById('current-time');
+            if (timeElement) {
+                const now = new Date();
+                timeElement.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+        updateTime();
+        setInterval(updateTime, 60000);
+
+        // --- Chart.js 学习进度分布图 (带高亮功能) ---
+        const chartData = {
+            labels: ['1-5页', '6-10', '11-15', '16-20', '21-25', '26-30', '31-35', '36-40', '41-45', '46-50'],
+            values: [2, 5, 8, 16, 12, 3, 1, 0, 0, 0],
+            // 定义每个区间的活动类型
+            activityTypes: [
+                [], 
+                ['测验题'], 
+                ['讨论'], 
+                ['测验题', '简答题'], 
+                ['讨论'], 
+                [], 
+                ['测验题'], 
+                [], 
+                [], 
+                []
+            ]
+        };
+
+        const baseColor = 'rgba(81, 45, 109, 0.6)';
+        const hoverColor = 'rgba(81, 45, 109, 0.8)';
+        const activityHoverColor = 'rgba(81, 45, 109, 1)';
+        const activityBorderColor = '#C7A4E4';
+
+        const progressChartCtx = document.getElementById('progressChart').getContext('2d');
+        const progressChart = new Chart(progressChartCtx, {
+            type: 'bar',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: '学生人数',
+                    data: chartData.values,
+                    activityTypes: chartData.activityTypes,
+                    backgroundColor: baseColor,
+                    borderColor: 'rgba(81, 45, 109, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    // 根据有无活动设置不同的悬停样式
+                    hoverBackgroundColor: chartData.activityTypes.map(a => a.length > 0 ? activityHoverColor : hoverColor),
+                    hoverBorderColor: chartData.activityTypes.map(a => a.length > 0 ? activityBorderColor : 'rgba(81, 45, 109, 1)'),
+                    hoverBorderWidth: chartData.activityTypes.map(a => a.length > 0 ? 2 : 1),
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false }, 
+                    tooltip: { 
+                        callbacks: { 
+                            label: function(context) { 
+                                return `学生人数: ${context.parsed.y}`; 
+                            },
+                            // 在Tooltip中加入活动信息
+                            afterBody: function(context) {
+                                const dataIndex = context[0].dataIndex;
+                                const activities = context[0].dataset.activityTypes[dataIndex];
+                                if (activities && activities.length > 0) {
+                                    return `\n环节: ${activities.join(', ')}`;
+                                }
+                                return null;
+                            }
+                        } 
+                    } 
+                },
+                scales: { 
+                    y: { beginAtZero: true, title: { display: true, text: '学生人数' } }, 
+                    x: { grid: { display: false } } 
+                }
+            }
+        });
+
+        // --- 其他JS函数 ---
+        function filterStudents() {
+            const input = document.getElementById('studentSearch');
+            const filter = input.value.toUpperCase();
+            const table = document.getElementById('studentTable');
+            const tr = table.rows;
+            for (let i = 1; i < tr.length; i++) {
+                const td = tr[i].getElementsByTagName('td')[0];
+                if (td) {
+                    if (td.textContent.toUpperCase().indexOf(filter) > -1) { tr[i].style.display = ""; } else { tr[i].style.display = "none"; }
+                }
+            }
+        }
+        function sortTable(n) {
+            const table = document.getElementById("studentTable");
+            let rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            switching = true;
+            dir = "asc"; 
+            while (switching) {
+                switching = false;
+                rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false;
+                    x = rows[i].getElementsByTagName("TD")[n];
+                    y = rows[i + 1].getElementsByTagName("TD")[n];
+                    let xVal = x.dataset.sort || x.innerHTML;
+                    let yVal = y.dataset.sort || y.innerHTML;
+                    if (dir == "asc") { if (Number(xVal) > Number(yVal)) { shouldSwitch = true; break; }
+                    } else if (dir == "desc") { if (Number(xVal) < Number(yVal)) { shouldSwitch = true; break; } }
+                }
+                if (shouldSwitch) {
+                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                    switching = true;
+                    switchcount++;
+                } else { if (switchcount == 0 && dir == "asc") { dir = "desc"; switching = true; } }
+            }
+        }
+        function changeTab(event, tabID) {
+            let tabcontent = document.getElementsByClassName("tab-content");
+            for (let i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+                tabcontent[i].classList.remove("active");
+            }
+            let tablinks = document.getElementsByClassName("tab-button");
+            for (let i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabID).style.display = "block";
+            document.getElementById(tabID).classList.add("active");
+            event.currentTarget.className += " active";
+            lucide.createIcons(); // Re-render icons if they are in the new tab
+        }
+    </script>
+</body>
+</html>
