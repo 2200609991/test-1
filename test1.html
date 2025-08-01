@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>教师看板 MVP - 终版</title>
+    <title>8.1看板demo</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -28,41 +28,59 @@
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
             transition: all 0.3s ease;
         }
-        .card:hover {
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07);
-            transform: translateY(-2px);
-        }
         .info-icon, .status-tag {
             cursor: pointer;
             position: relative;
         }
         .tooltip {
             visibility: hidden;
-            width: 220px;
+            width: max-content;
+            max-width: 240px;
             background-color: #333;
             color: #fff;
             text-align: left;
             border-radius: 6px;
             padding: 8px 12px;
             position: absolute;
-            z-index: 10;
+            z-index: 50;
             bottom: 125%;
             left: 50%;
-            margin-left: -110px;
+            transform: translateX(-50%);
             opacity: 0;
             transition: opacity 0.3s;
             font-size: 0.8rem;
             font-weight: normal;
             line-height: 1.5;
         }
+        .tooltip.tooltip-right {
+            left: auto;
+            right: 0;
+            transform: translateX(0);
+        }
         .info-icon:hover .tooltip, .status-tag:hover .tooltip {
             visibility: visible;
             opacity: 1;
+        }
+        .sortable {
+            position: relative;
+            padding-right: 1.5rem; /* Space for arrow */
         }
         .sortable:hover {
             cursor: pointer;
             background-color: #f9fafb;
         }
+        .sort-arrow {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        .sortable.sorted .sort-arrow {
+            opacity: 1;
+        }
+
         .tab-button {
             padding: 0.5rem 1rem;
             border-radius: 0.5rem;
@@ -74,21 +92,55 @@
             color: var(--theme-purple);
             background-color: var(--theme-purple-light);
         }
-        .tab-content {
-            display: none;
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 40;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
         }
-        .tab-content.active {
-            display: block;
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
         }
+        .modal-container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: scale(0.95);
+            transition: transform 0.3s;
+        }
+        .modal-overlay.active .modal-container {
+            transform: scale(1);
+        }
+        .hidden { display: none; }
     </style>
 </head>
 <body class="antialiased">
-    <div class="min-h-screen p-4 md:p-6">
-        <!-- 页面头部 -->
+    <div id="dashboard-view" class="min-h-screen p-4 md:p-6">
         <header class="flex flex-wrap justify-between items-center mb-6 gap-4">
             <div>
                 <h1 class="text-3xl font-bold text-gray-800">教师看板</h1>
-                <p class="text-gray-500">课程：产品经理的必修课 | 班级：PM007期</p>
+                <p class="text-gray-500">
+                    <span>课程：产品经理的必修课</span>
+                    <span class="mx-2">|</span>
+                    <span id="current-module" class="font-semibold theme-purple-text">模块：市场分析与定位</span>
+                </p>
             </div>
             <div class="flex items-center space-x-4">
                 <div class="flex items-center text-gray-600 bg-white px-3 py-2 rounded-lg shadow-sm">
@@ -106,7 +158,6 @@
             
             <div class="lg:col-span-2 flex flex-col gap-6">
                 
-                <!-- 模块一：课堂节奏仪表盘 -->
                 <section class="card">
                     <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
                         <i data-lucide="gauge-circle" class="w-6 h-6 mr-2 theme-purple-text"></i>
@@ -114,22 +165,33 @@
                     </h2>
                     <p class="text-sm text-gray-500 mb-6">实时洞察班级整体学习状态</p>
                     
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                         <div class="bg-purple-50 border-l-4 theme-purple-border p-4 rounded-lg">
-                            <p class="text-sm text-gray-500 flex items-center">平均进度 <span class="info-icon ml-1"><i data-lucide="info" class="w-3 h-3"><span class="tooltip">全班学生所在PPT页码的平均值</span></i></span></p>
-                            <p class="text-2xl font-bold theme-purple-text">18 / 50 页</p>
+                            <p class="text-sm text-gray-500 flex items-center">平均进度 
+                                <span class="info-icon ml-1">
+                                    <i data-lucide="info" class="w-3 h-3"></i>
+                                    <span class="tooltip">全班学生所在PPT页码的平均值</span>
+                                </span>
+                            </p>
+                            <p class="text-2xl font-bold theme-purple-text">24 / 50 页</p>
                         </div>
                         <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
-                            <p class="text-sm text-gray-500 flex items-center">整体正确率 <span class="info-icon ml-1"><i data-lucide="info" class="w-3 h-3"><span class="tooltip">所有已作答【客观题】的总正确数 / 总作答数</span></i></span></p>
-                            <p class="text-2xl font-bold text-green-600">82%</p>
+                            <p class="text-sm text-gray-500 flex items-center">整体正确率 
+                                <span class="info-icon ml-1">
+                                    <i data-lucide="info" class="w-3 h-3"></i>
+                                    <span class="tooltip">所有已作答【客观题】的总正确数 / 总作答数</span>
+                                </span>
+                            </p>
+                            <p class="text-2xl font-bold text-green-600">76%</p>
                         </div>
                         <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-                            <p class="text-sm text-gray-500 flex items-center">总互动次数 <span class="info-icon ml-1"><i data-lucide="info" class="w-3 h-3"><span class="tooltip">学生完成测验、参与讨论的总次数</span></i></span></p>
-                            <p class="text-2xl font-bold text-blue-600">345 次</p>
-                        </div>
-                        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg">
-                            <p class="text-sm text-gray-500 flex items-center">求助指数 <span class="info-icon ml-1"><i data-lucide="info" class="w-3 h-3"><span class="tooltip">学生在AI答疑区主动提问的总次数</span></i></span></p>
-                            <p class="text-2xl font-bold text-yellow-600">21 次</p>
+                            <p class="text-sm text-gray-500 flex items-center">总互动次数 
+                                <span class="info-icon ml-1">
+                                    <i data-lucide="info" class="w-3 h-3"></i>
+                                    <span class="tooltip">学生完成测验、参与讨论的总次数</span>
+                                </span>
+                            </p>
+                            <p class="text-2xl font-bold text-blue-600">512 次</p>
                         </div>
                     </div>
 
@@ -141,86 +203,23 @@
                     </div>
                 </section>
 
-                <!-- 模块三：内容难点洞察 (Tab版) -->
                 <section class="card">
                      <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
                         <i data-lucide="siren" class="w-6 h-6 mr-2 theme-purple-text"></i>
                         内容难点洞察
                     </h2>
-                    <p class="text-sm text-gray-500 mb-4">快速定位课程中的知识与讨论难点</p>
+                    <p class="text-sm text-gray-500 mb-4">点击列表查看详情，数据按最关键指标排序</p>
                     
-                    <!-- Tab 按钮 -->
                     <div class="border-b border-gray-200 mb-4">
-                        <nav class="-mb-px flex space-x-4" aria-label="Tabs">
-                            <button onclick="changeTab(event, 'objective')" class="tab-button active">客观题难点</button>
-                            <button onclick="changeTab(event, 'subjective')" class="tab-button">主观题提醒</button>
-                            <button onclick="changeTab(event, 'discussion')" class="tab-button">讨论质量</button>
+                        <nav id="insight-tabs" class="-mb-px flex space-x-4" aria-label="Tabs">
                         </nav>
                     </div>
 
-                    <!-- Tab 内容 -->
-                    <div>
-                        <div id="objective" class="tab-content active">
-                            <h3 class="font-semibold text-gray-700 mb-4 text-base">错误率最高的客观题</h3>
-                            <ol class="space-y-3">
-                                <li class="p-4 rounded-lg border border-red-200 bg-red-50/50">
-                                    <div class="flex justify-between items-center">
-                                        <span class="flex items-center text-sm font-semibold text-red-600"><i data-lucide="check-square" class="w-4 h-4 mr-2"></i>Top 1 / 错误率: 75%</span>
-                                        <span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">选择题</span>
-                                    </div>
-                                    <p class="font-medium text-gray-800 mt-2 pl-6">P8 - 市场定位四要素是什么？</p>
-                                </li>
-                                <li class="p-4 rounded-lg border border-orange-200 bg-orange-50/50">
-                                     <div class="flex justify-between items-center">
-                                        <span class="flex items-center text-sm font-semibold text-orange-600"><i data-lucide="toggle-right" class="w-4 h-4 mr-2"></i>Top 2 / 错误率: 61%</span>
-                                        <span class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">判断题</span>
-                                    </div>
-                                    <p class="font-medium text-gray-800 mt-2 pl-6">P15 - 关于MVP的定义，哪个是错误的？</p>
-                                </li>
-                            </ol>
-                        </div>
-                        <div id="subjective" class="tab-content">
-                            <h3 class="font-semibold text-gray-700 mb-4 text-base">平均耗时最长的主观题</h3>
-                             <ol class="space-y-3">
-                                <li class="p-4 rounded-lg border border-blue-200 bg-blue-50/50">
-                                    <div class="flex justify-between items-center">
-                                        <span class="flex items-center text-sm font-semibold text-blue-600"><i data-lucide="message-square" class="w-4 h-4 mr-2"></i>耗时最长 / 平均 3分45秒</span>
-                                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">简答题</span>
-                                    </div>
-                                    <p class="font-medium text-gray-800 mt-2 pl-6">P25 - 请为你的产品设计一个增长飞轮</p>
-                                </li>
-                            </ol>
-                        </div>
-                        <div id="discussion" class="tab-content">
-                            <h3 class="font-semibold text-gray-700 mb-4 text-base">讨论质量快照 (按平均发言字数)</h3>
-                            <div class="space-y-3">
-                                <div class="p-4 border rounded-lg flex items-center gap-4">
-                                    <div class="relative w-16 h-16">
-                                        <svg class="w-full h-full" viewBox="0 0 36 36"><path class="text-gray-200" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path><path class="text-red-500" stroke-dasharray="36, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3" stroke-linecap="round"></path></svg>
-                                        <div class="absolute inset-0 flex items-center justify-center"><span class="text-lg font-bold text-red-500">18</span></div>
-                                    </div>
-                                    <div>
-                                        <p class="font-medium text-gray-800">讨论一：什么是好产品？</p>
-                                        <p class="text-sm text-gray-500">平均发言: <span class="font-semibold">18字</span> (目标: >20字)</p>
-                                    </div>
-                                </div>
-                                <div class="p-4 border rounded-lg flex items-center gap-4">
-                                     <div class="relative w-16 h-16">
-                                        <svg class="w-full h-full" viewBox="0 0 36 36"><path class="text-gray-200" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path><path class="text-green-500" stroke-dasharray="85, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3" stroke-linecap="round"></path></svg>
-                                        <div class="absolute inset-0 flex items-center justify-center"><span class="text-lg font-bold text-green-500">85</span></div>
-                                    </div>
-                                    <div>
-                                        <p class="font-medium text-gray-800">讨论二：分析案例A优缺点</p>
-                                        <p class="text-sm text-gray-500">平均发言: <span class="font-semibold">85字</span> (目标: >50字)</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                    <div id="insight-content" class="max-h-80 overflow-y-auto pr-2">
                     </div>
                 </section>
             </div>
 
-            <!-- 右侧栏：模块二 -->
             <div class="card lg:col-span-1 flex flex-col">
                 <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
                     <i data-lucide="users" class="w-6 h-6 mr-2 theme-purple-text"></i>
@@ -234,52 +233,13 @@
                     <table id="studentTable" class="w-full text-sm text-left text-gray-500">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
                             <tr>
-                                <th scope="col" class="px-3 py-3 sortable" onclick="sortTable(0)">姓名 <i data-lucide="arrow-up-down" class="inline w-3 h-3"></i></th>
-                                <th scope="col" class="px-2 py-3 sortable" onclick="sortTable(1)">进度 <i data-lucide="arrow-up-down" class="inline w-3 h-3"></i></th>
-                                <th scope="col" class="px-2 py-3 sortable" onclick="sortTable(2)">得分 <i data-lucide="arrow-up-down" class="inline w-3 h-3"></i></th>
+                                <th scope="col" class="px-3 py-3 sortable" onclick="sortTable(0)">姓名<span class="sort-arrow"></span></th>
+                                <th scope="col" class="px-2 py-3 sortable" onclick="sortTable(1)">进度<span class="sort-arrow"></span></th>
+                                <th scope="col" class="px-2 py-3 sortable" onclick="sortTable(2)">得分<span class="sort-arrow"></span></th>
                                 <th scope="col" class="px-3 py-3">状态</th>
                             </tr>
                         </thead>
                         <tbody id="studentTableBody">
-                            <tr class="bg-white border-b hover:bg-gray-50">
-                                <td class="px-3 py-3 font-medium text-gray-900">张三</td>
-                                <td class="px-2 py-3" data-sort="18">18/50</td>
-                                <td class="px-2 py-3" data-sort="85">85%</td>
-                                <td class="px-3 py-3"></td>
-                            </tr>
-                            <tr class="bg-white border-b hover:bg-gray-50">
-                                <td class="px-3 py-3 font-medium text-gray-900">李四</td>
-                                <td class="px-2 py-3" data-sort="5">5/50</td>
-                                <td class="px-2 py-3" data-sort="70">70%</td>
-                                <td class="px-3 py-3 whitespace-nowrap">
-                                    <span class="status-tag bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                                        进度落后
-                                        <span class="tooltip">当前进度(5/50)显著低于班级平均进度(18/50)。</span>
-                                    </span>
-                                </td>
-                            </tr>
-                            <tr class="bg-white border-b hover:bg-gray-50">
-                                <td class="px-3 py-3 font-medium text-gray-900">王五</td>
-                                <td class="px-2 py-3" data-sort="35">35/50</td>
-                                <td class="px-2 py-3" data-sort="95">95%</td>
-                                <td class="px-3 py-3 whitespace-nowrap">
-                                    <span class="status-tag bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                                        一马当先
-                                        <span class="tooltip">当前进度(35/50)显著高于班级平均进度(18/50)。</span>
-                                    </span>
-                                </td>
-                            </tr>
-                             <tr class="bg-white border-b hover:bg-gray-50">
-                                <td class="px-3 py-3 font-medium text-gray-900">赵六</td>
-                                <td class="px-2 py-3" data-sort="8">8/50</td>
-                                <td class="px-2 py-3" data-sort="40">40%</td>
-                                <td class="px-3 py-3 whitespace-nowrap">
-                                    <span class="status-tag bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                                        遇到困难
-                                        <span class="tooltip">该生在 P8 测验题上停留超过3分钟，且连续答错2次。</span>
-                                    </span>
-                                </td>
-                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -287,8 +247,147 @@
         </main>
     </div>
 
+    <div id="student-report-view" class="hidden min-h-screen p-4 md:p-6">
+        <header class="flex justify-between items-center mb-6">
+            <div>
+                <button onclick="navigateToDashboard()" class="flex items-center text-gray-600 hover:text-purple-600 font-semibold">
+                    <i data-lucide="arrow-left" class="w-5 h-5 mr-2"></i>
+                    返回教师看板
+                </button>
+                <h1 id="student-report-name" class="text-3xl font-bold text-gray-800 mt-2"></h1>
+            </div>
+        </header>
+        <main class="flex flex-col gap-6">
+            <section class="card">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center md:text-left">
+                    <div class="flex items-center justify-center md:justify-start">
+                        <div class="bg-purple-100 p-3 rounded-full">
+                            <i data-lucide="user-circle" class="w-10 h-10 theme-purple-text"></i>
+                        </div>
+                        <div class="ml-4">
+                            <h2 id="student-report-name-main" class="text-2xl font-bold text-gray-800"></h2>
+                            <p class="text-gray-500">学情总览</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-around md:col-span-2 bg-gray-50 p-4 rounded-lg">
+                        <div>
+                            <p class="text-sm text-gray-600">当前进度</p>
+                            <p id="student-report-progress" class="font-bold text-2xl theme-purple-text"></p>
+                        </div>
+                        <div class="border-l h-10 mx-4"></div>
+                        <div>
+                            <p class="text-sm text-gray-600">客观题正确率</p>
+                            <p id="student-report-score" class="font-bold text-2xl text-green-600"></p>
+                        </div>
+                        <div class="border-l h-10 mx-4"></div>
+                        <div>
+                            <p class="text-sm text-gray-600">总学习时长</p>
+                            <p id="student-report-time" class="font-bold text-2xl text-blue-600"></p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 card">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">详细学习轨迹</h2>
+                    <div id="student-activity-log" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                    </div>
+                </div>
+                <div class="lg:col-span-1 card">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">停留时间分布</h2>
+                    <div class="h-64">
+                        <canvas id="studentTimeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="questionModal" class="modal-overlay" onclick="closeModal('questionModal')">
+        <div class="modal-container" onclick="event.stopPropagation()">
+        </div>
+    </div>
+    
     <script>
-        lucide.createIcons();
+        const classData = {
+            totalStudents: 12,
+            progressChart: {
+                labels: ['1-10页', '11-20', '21-30', '31-40', '41-50'],
+                values: [3, 4, 2, 2, 1],
+                activityTypes: [['测验题'], ['讨论'], ['测验题', '简答题'], ['讨论'], ['测验题']]
+            },
+            questions: {
+                objective: [
+                    { id: 1, page: 8, title: '市场定位四要素是什么？', type: '选择题', errorRate: 75, completed: 10, content: 'A. 产品、价格、渠道、促销<br>B. 用户、场景、需求、方案<br>C. ...<br>D. ...', correct: 'A', stats: '班级选择A: 25%, B: 40%, C: 15%, D: 20%' },
+                    { id: 2, page: 15, title: '关于MVP的定义，哪个是错误的？', type: '判断题', errorRate: 61, completed: 9, content: 'MVP是为了用最小成本验证核心假设。', correct: '正确', stats: '选择正确: 39%, 选择错误: 61%' },
+                    { id: 3, page: 42, title: '波特五力模型不包含以下哪个？', type: '选择题', errorRate: 55, completed: 5, content: 'A. 供应商议价能力<br>B. 替代品的威胁<br>C. 宏观经济环境<br>D. 新进入者的威胁', correct: 'C', stats: '...' },
+                ],
+                subjective: [
+                    { id: 1, page: 25, title: '请为你的产品设计一个增长飞轮', type: '简答题', avgTime: '3分45秒', completed: 6, content: '请结合AARRR模型，为你负责的产品设计一个增长飞轮，并说明各环节的关键指标。' },
+                    { id: 2, page: 38, title: '简述SWOT分析的四个维度。', type: '简答题', avgTime: '2分15秒', completed: 4, content: '请分别解释Strengths, Weaknesses, Opportunities, Threats的含义。' }
+                ],
+                discussion: [
+                    { id: 1, page: 12, title: '什么是好产品？', type: '讨论', avgWords: 18, avgTime: '2分30秒', target: 20, completed: 11, content: '请从用户价值、商业价值、产品体验等角度，谈谈你对“好产品”的理解。' },
+                    { id: 2, page: 22, title: '分析案例A优缺点', type: '讨论', avgWords: 85, avgTime: '4分15秒', target: 50, completed: 7, content: '请结合所学知识，分析案例A的优缺点。' },
+                    { id: 3, page: 33, title: '你认为AI对产品经理工作最大的改变是什么？', type: '讨论', avgWords: 120, avgTime: '5分02秒', target: 100, completed: 5, content: '请从效率提升、能力要求、工作流程等角度展开讨论。' }
+                ]
+            },
+            students: {
+                '张三': { progress: '18/50', score: '85%', totalTime: '25分钟', timeDistribution: [2, 3, 4, 8, 8], activityLog: [
+                    { qId: 1, type: 'objective', result: 'correct', studentAnswer: 'A', correctAnswer: 'A', time: '30秒' },
+                    { qId: 1, type: 'discussion', studentAnswer: '我认为好产品就是能解决用户痛点，并且好用的产品。', time: '2分10秒', wordCount: 20 },
+                    { qId: 2, type: 'objective', result: 'correct', studentAnswer: '正确', correctAnswer: '正确', time: '45秒' }
+                ]},
+                '李四': { progress: '5/50', score: '70%', totalTime: '18分钟', timeDistribution: [5, 13], activityLog: [ { qId: 1, type: 'objective', result: 'incorrect', studentAnswer: 'B', correctAnswer: 'A', time: '1分15秒' } ]},
+                '王五': { progress: '45/50', score: '95%', totalTime: '35分钟', timeDistribution: [1, 2, 3, 5, 6, 10, 8], activityLog: [/* ... */]},
+                '赵六': { progress: '8/50', score: '40%', totalTime: '22分钟', timeDistribution: [3, 19], activityLog: [ { qId: 1, type: 'objective', result: 'incorrect', studentAnswer: 'D', correctAnswer: 'A', time: '3分30秒', note: '连续答错2次' } ]},
+                '钱七': { progress: '50/50', score: '50%', totalTime: '45分钟', timeDistribution: [2,3,4,5,6,7,8], activityLog: [
+                    { qId: 1, type: 'objective', result: 'correct', studentAnswer: 'A', correctAnswer: 'A', time: '25秒' },
+                    { qId: 1, type: 'discussion', studentAnswer: '好产品应该具备用户价值、商业价值和创新性。', time: '3分15秒', wordCount: 95 },
+                    { qId: 2, type: 'objective', result: 'incorrect', studentAnswer: '错误', correctAnswer: '正确', time: '20秒' },
+                    { qId: 2, type: 'discussion', studentAnswer: '案例A的优点在于快速验证了市场需求...', time: '4分05秒', wordCount: 45 },
+                    { qId: 1, type: 'subjective', studentAnswer: '我的产品的增长飞轮是...', time: '5分30秒' }
+                ]},
+                '孙八': { progress: '0/50', score: 'N/A', totalTime: '2分钟', timeDistribution: [], activityLog: []},
+                '周吴': { progress: '28/50', score: '88%', totalTime: '31分钟', timeDistribution: [4, 8, 19], activityLog: [/*...*/] },
+                '郑冯': { progress: '15/50', score: '100%', totalTime: '19分钟', timeDistribution: [5, 14], activityLog: [/*...*/] },
+                '陈褚': { progress: '35/50', score: '65%', totalTime: '40分钟', timeDistribution: [3, 7, 10, 20], activityLog: [/*...*/] },
+                '卫蒋': { progress: '19/50', score: '75%', totalTime: '28分钟', timeDistribution: [6, 13, 9], activityLog: [/*...*/] },
+                '沈韩': { progress: '48/50', score: '92%', totalTime: '55分钟', timeDistribution: [5,10,12,13,15], activityLog: [/*...*/] },
+                '杨朱': { progress: '0/50', score: 'N/A', totalTime: '10分钟', timeDistribution: [], activityLog: [/*...*/] }
+            }
+        };
+
+        // Global state for table sorting
+        let sortState = { col: -1, dir: 'asc' };
+        
+        // --- Main Execution ---
+        document.addEventListener('DOMContentLoaded', () => {
+            renderDashboard();
+        });
+
+        /**
+         * Main function to initialize the dashboard.
+         * This is the entry point for rendering all components.
+         */
+        function renderDashboard() {
+            updateTime();
+            setInterval(updateTime, 60000);
+            
+            // Render all dynamic components
+            renderStudentList();
+            renderInsightTabs();
+            renderAllInsightPanes(); // Use the robust tab rendering method
+            renderProgressChart();
+            
+            // IMPORTANT: Initialize all icons after HTML is injected.
+            lucide.createIcons();
+        }
+
+        /**
+         * Updates the clock.
+         */
         function updateTime() {
             const timeElement = document.getElementById('current-time');
             if (timeElement) {
@@ -296,132 +395,298 @@
                 timeElement.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
             }
         }
-        updateTime();
-        setInterval(updateTime, 60000);
 
-        // --- Chart.js 学习进度分布图 (带高亮功能) ---
-        const chartData = {
-            labels: ['1-5页', '6-10', '11-15', '16-20', '21-25', '26-30', '31-35', '36-40', '41-45', '46-50'],
-            values: [2, 5, 8, 16, 12, 3, 1, 0, 0, 0],
-            // 定义每个区间的活动类型
-            activityTypes: [
-                [], 
-                ['测验题'], 
-                ['讨论'], 
-                ['测验题', '简答题'], 
-                ['讨论'], 
-                [], 
-                ['测验题'], 
-                [], 
-                [], 
-                []
-            ]
-        };
+        /**
+         * Renders the student list table.
+         */
+        function renderStudentList() {
+            const tbody = document.getElementById('studentTableBody');
+            tbody.innerHTML = Object.keys(classData.students).map(name => {
+                const s = classData.students[name];
+                const progress = parseInt(s.progress);
+                let statusTag = '';
+                let progressCell = '';
+                let scoreCell = '';
 
-        const baseColor = 'rgba(81, 45, 109, 0.6)';
-        const hoverColor = 'rgba(81, 45, 109, 0.8)';
-        const activityHoverColor = 'rgba(81, 45, 109, 1)';
-        const activityBorderColor = '#C7A4E4';
-
-        const progressChartCtx = document.getElementById('progressChart').getContext('2d');
-        const progressChart = new Chart(progressChartCtx, {
-            type: 'bar',
-            data: {
-                labels: chartData.labels,
-                datasets: [{
-                    label: '学生人数',
-                    data: chartData.values,
-                    activityTypes: chartData.activityTypes,
-                    backgroundColor: baseColor,
-                    borderColor: 'rgba(81, 45, 109, 1)',
-                    borderWidth: 1,
-                    borderRadius: 4,
-                    // 根据有无活动设置不同的悬停样式
-                    hoverBackgroundColor: chartData.activityTypes.map(a => a.length > 0 ? activityHoverColor : hoverColor),
-                    hoverBorderColor: chartData.activityTypes.map(a => a.length > 0 ? activityBorderColor : 'rgba(81, 45, 109, 1)'),
-                    hoverBorderWidth: chartData.activityTypes.map(a => a.length > 0 ? 2 : 1),
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { 
-                    legend: { display: false }, 
-                    tooltip: { 
-                        callbacks: { 
-                            label: function(context) { 
-                                return `学生人数: ${context.parsed.y}`; 
-                            },
-                            // 在Tooltip中加入活动信息
-                            afterBody: function(context) {
-                                const dataIndex = context[0].dataIndex;
-                                const activities = context[0].dataset.activityTypes[dataIndex];
-                                if (activities && activities.length > 0) {
-                                    return `\n环节: ${activities.join(', ')}`;
-                                }
-                                return null;
-                            }
-                        } 
-                    } 
-                },
-                scales: { 
-                    y: { beginAtZero: true, title: { display: true, text: '学生人数' } }, 
-                    x: { grid: { display: false } } 
+                if (progress === 0) {
+                    progressCell = `<td class="px-2 py-3 text-gray-400" data-sort="0">未开始</td>`;
+                    scoreCell = `<td class="px-2 py-3 text-gray-400" data-sort="0">未开始</td>`;
+                    statusTag = `<span class="status-tag bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded-full">未开始</span>`;
+                } else {
+                    progressCell = `<td class="px-2 py-3" data-sort="${progress}">${s.progress}</td>`;
+                    scoreCell = `<td class="px-2 py-3" data-sort="${parseInt(s.score) || 0}">${s.score}</td>`;
+                    if (s.progress === '50/50') {
+                        statusTag = `<span class="status-tag bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">已完成</span>`;
+                    } else if (progress > 40) {
+                        statusTag = `<span class="status-tag bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">一马当先<span class="tooltip tooltip-right">当前进度(${s.progress})显著高于班级平均进度(24/50)。</span></span>`;
+                    } else if (progress < 10) {
+                        statusTag = `<span class="status-tag bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">进度落后<span class="tooltip tooltip-right">当前进度(${s.progress})显著低于班级平均进度(24/50)。</span></span>`;
+                    }
                 }
-            }
-        });
+                
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-3 py-3 font-medium text-gray-900"><a href="#" onclick="navigateToStudentReport('${name}'); return false;" class="theme-purple-text hover:underline">${name}</a></td>
+                        ${progressCell}
+                        ${scoreCell}
+                        <td class="px-3 py-3">${statusTag}</td>
+                    </tr>
+                `;
+            }).join('');
+             lucide.createIcons();
+        }
 
-        // --- 其他JS函数 ---
+        /**
+         * Sorts the student table by a given column index 'n'.
+         */
+        function sortTable(n) {
+            const table = document.getElementById('studentTable');
+            const tbody = table.tBodies[0];
+            const rows = Array.from(tbody.rows);
+            const headers = table.tHead.rows[0].cells;
+            
+            const currentDir = sortState.col === n ? (sortState.dir === 'asc' ? 'desc' : 'asc') : 'asc';
+            sortState = { col: n, dir: currentDir };
+            
+            rows.sort((a, b) => {
+                const aCell = a.cells[n];
+                const bCell = b.cells[n];
+                const aVal = aCell.dataset.sort || aCell.textContent;
+                const bVal = bCell.dataset.sort || bCell.textContent;
+                const isNumeric = aCell.dataset.sort !== undefined;
+                
+                let comparison = 0;
+                if (isNumeric) {
+                    comparison = parseFloat(aVal) - parseFloat(bVal);
+                } else {
+                    comparison = aVal.localeCompare(bVal, 'zh-CN');
+                }
+                
+                return currentDir === 'asc' ? comparison : -comparison;
+            });
+            
+            tbody.innerHTML = "";
+            rows.forEach(row => tbody.appendChild(row));
+
+            for (let i = 0; i < headers.length; i++) {
+                headers[i].classList.remove('sorted');
+                const arrow = headers[i].querySelector('.sort-arrow');
+                if (arrow) arrow.innerHTML = '';
+            }
+            
+            const activeHeader = headers[n];
+            activeHeader.classList.add('sorted');
+            const arrowSpan = activeHeader.querySelector('.sort-arrow');
+            if (arrowSpan) {
+                arrowSpan.innerHTML = currentDir === 'asc' ? '<i data-lucide="arrow-up" class="w-4 h-4"></i>' : '<i data-lucide="arrow-down" class="w-4 h-4"></i>';
+                lucide.createIcons({ nodes: [arrowSpan] });
+            }
+        }
+        
+        /**
+         * Renders the tab buttons for the insights section.
+         */
+        function renderInsightTabs() {
+            const tabsContainer = document.getElementById('insight-tabs');
+            tabsContainer.innerHTML = `
+                <button onclick="changeTab(event, 'objective')" class="tab-button active">客观题 (${classData.questions.objective.length})</button>
+                <button onclick="changeTab(event, 'subjective')" class="tab-button">主观题 (${classData.questions.subjective.length})</button>
+                <button onclick="changeTab(event, 'discussion')" class="tab-button">讨论 (${classData.questions.discussion.length})</button>
+            `;
+        }
+        
+        /**
+         * Renders all three tab content panes at once for robust toggling.
+         */
+        function renderAllInsightPanes() {
+            const contentContainer = document.getElementById('insight-content');
+            const totalStudents = classData.totalStudents;
+            let html = '';
+
+            const questionTypes = ['objective', 'subjective', 'discussion'];
+            questionTypes.forEach((type, index) => {
+                const isActive = index === 0 ? 'active' : '';
+                let listHtml = '';
+
+                if (type === 'objective') {
+                    listHtml = classData.questions.objective.sort((a, b) => b.errorRate - a.errorRate).map(q => `
+                        <li onclick="showQuestionDetail('objective', ${q.id})" class="p-4 rounded-lg border hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition">
+                            <div class="flex justify-between items-center">
+                                <span class="flex items-center text-sm font-semibold text-red-600"><i data-lucide="check-square" class="w-4 h-4 mr-2"></i>错误率: ${q.errorRate}%</span>
+                                <span class="text-xs ${q.completed === totalStudents ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} px-2 py-1 rounded-full">完成: ${q.completed}/${totalStudents}</span>
+                            </div>
+                            <p class="font-medium text-gray-800 mt-2 pl-6">P${q.page} - ${q.title}</p>
+                        </li>`).join('');
+                } else if (type === 'subjective') {
+                     listHtml = classData.questions.subjective.map(q => `
+                        <li onclick="showQuestionDetail('subjective', ${q.id})" class="p-4 rounded-lg border hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition">
+                             <div class="flex justify-between items-center">
+                                 <span class="flex items-center text-sm font-semibold text-blue-600"><i data-lucide="message-square" class="w-4 h-4 mr-2"></i>平均耗时: ${q.avgTime}</span>
+                                 <span class="text-xs ${q.completed === totalStudents ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} px-2 py-1 rounded-full">完成: ${q.completed}/${totalStudents}</span>
+                            </div>
+                            <p class="font-medium text-gray-800 mt-2 pl-6">P${q.page} - ${q.title}</p>
+                        </li>`).join('');
+                } else if (type === 'discussion') {
+                     listHtml = classData.questions.discussion.sort((a,b) => a.avgWords - b.avgWords).map(q => `
+                        <li onclick="showQuestionDetail('discussion', ${q.id})" class="p-4 rounded-lg border hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition">
+                            <div class="flex justify-between items-center flex-wrap gap-2">
+                                <span class="flex items-center text-sm font-semibold ${q.avgWords < q.target ? 'text-red-600' : 'text-green-600'}"><i data-lucide="users" class="w-4 h-4 mr-2"></i>平均发言: ${q.avgWords}字</span>
+                                <span class="text-xs text-gray-500">平均耗时: ${q.avgTime}</span>
+                                <span class="text-xs ${q.completed === totalStudents ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} px-2 py-1 rounded-full">完成: ${q.completed}/${totalStudents}</span>
+                            </div>
+                            <p class="font-medium text-gray-800 mt-2 pl-6">P${q.page} - ${q.title}</p>
+                        </li>`).join('');
+                }
+
+                html += `<div id="${type}" class="tab-content ${isActive}"><ol class="space-y-3">${listHtml}</ol></div>`;
+            });
+            
+            contentContainer.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        /**
+         * Handles the logic for switching tabs.
+         */
+        function changeTab(event, tabID) {
+            const tabContainer = document.getElementById('insight-content');
+            const tabButtons = document.querySelectorAll("#insight-tabs .tab-button");
+            
+            tabButtons.forEach(button => button.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            const tabPanes = tabContainer.querySelectorAll('.tab-content');
+            tabPanes.forEach(pane => pane.classList.remove('active'));
+            document.getElementById(tabID).classList.add('active');
+        }
+
+        /**
+         * Renders the main progress distribution chart.
+         */
+        let progressChartInstance;
+        function renderProgressChart() {
+            const ctx = document.getElementById('progressChart');
+            if (!ctx) return;
+            if (progressChartInstance) {
+                progressChartInstance.destroy();
+            }
+            progressChartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: classData.progressChart.labels,
+                    datasets: [{
+                        label: '学生人数',
+                        data: classData.progressChart.values,
+                        backgroundColor: 'rgba(81, 45, 109, 0.6)',
+                        borderColor: 'rgba(81, 45, 109, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: '学生人数' }, ticks: { stepSize: 1, precision: 0 }},
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+        
+        /**
+         * Navigation functions to switch between dashboard and student report.
+         */
+        function navigateToDashboard(){
+            document.getElementById('student-report-view').classList.add('hidden');
+            document.getElementById('dashboard-view').classList.remove('hidden');
+        }
+        function navigateToStudentReport(studentName){
+            document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('student-report-view').classList.remove('hidden');
+            populateStudentReport(studentName);
+            lucide.createIcons();
+        }
+
+        /**
+         * Populates the student report view with data for the selected student.
+         */
+        let studentTimeChartInstance;
+        function populateStudentReport(studentName){
+            const student = classData.students[studentName];
+            document.getElementById('student-report-name').textContent = `${studentName} 的学情报告`;
+            document.getElementById('student-report-name-main').textContent = studentName;
+            document.getElementById('student-report-progress').textContent = student.progress;
+            document.getElementById('student-report-score').textContent = student.score;
+            document.getElementById('student-report-time').textContent = student.totalTime;
+
+            const logContainer = document.getElementById('student-activity-log');
+            const allQuestions = [
+                ...classData.questions.objective.map(q => ({ ...q, baseType: 'objective' })),
+                ...classData.questions.subjective.map(q => ({ ...q, baseType: 'subjective' })),
+                ...classData.questions.discussion.map(q => ({ ...q, baseType: 'discussion' }))
+            ].sort((a, b) => a.page - b.page);
+
+            logContainer.innerHTML = allQuestions.map(q => {
+                const studentAnswer = student.activityLog.find(log => log.qId === q.id && log.type === q.baseType);
+                if (studentAnswer) {
+                    let resultClass = 'text-green-600', resultIcon = 'check', resultText = '回答正确';
+                    if (studentAnswer.result === 'incorrect') {
+                       resultClass = 'text-red-600'; resultIcon = 'x'; resultText = '回答错误';
+                    }
+                    if (q.baseType === 'discussion' || q.baseType === 'subjective') {
+                        resultClass = 'text-blue-600'; resultIcon = 'message-square'; resultText = '已完成';
+                    }
+                    
+                    let answerDetailsHtml = '';
+                    if (q.baseType === 'objective') {
+                        answerDetailsHtml = `<div class="text-sm mt-2 p-3 bg-gray-50 rounded-lg space-y-2"><div class="font-semibold text-gray-600">题目选项:</div><div class="text-gray-800 pl-2">${q.content}</div><div class="border-t my-2"></div><div><span class="font-semibold">你的回答:</span> <span class="font-mono p-1 rounded ${studentAnswer.result === 'correct' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${studentAnswer.studentAnswer}</span></div><div><span class="font-semibold">正确答案:</span> <span class="font-mono p-1 bg-gray-200 text-gray-800 rounded">${studentAnswer.correctAnswer}</span></div></div>`;
+                    } else if (q.baseType === 'subjective') {
+                         answerDetailsHtml = `<div class="text-sm mt-2 p-3 bg-gray-50 rounded-lg"><div class="font-semibold text-gray-600">你的回答:</div><div class="mt-1 text-gray-800">${studentAnswer.studentAnswer}</div></div>`;
+                    }
+
+                    return `<div class="p-4 rounded-lg border bg-white shadow-sm"><div class="flex justify-between items-start"><div class="flex-grow"><div class="flex justify-between items-center text-sm"><span class="font-semibold">P${q.page} - ${q.type}</span><span class="font-semibold ${resultClass} flex items-center"><i data-lucide="${resultIcon}" class="w-4 h-4 mr-1"></i>${resultText}</span></div><p class="font-medium text-gray-800 my-2">${q.title}</p></div></div>${answerDetailsHtml}<div class="text-xs text-gray-500 pt-2 text-right">耗时: ${studentAnswer.time}${studentAnswer.note ? ` (${studentAnswer.note})` : ''}${studentAnswer.wordCount ? ` | 字数: ${studentAnswer.wordCount}` : ''}</div></div>`;
+                } else {
+                    return `<div class="p-4 rounded-lg border border-dashed bg-gray-50"><div class="flex justify-between items-center text-sm"><span class="font-semibold">P${q.page} - ${q.type}</span><span class="font-semibold text-gray-500 flex items-center"><i data-lucide="circle-slash" class="w-4 h-4 mr-1"></i>未完成</span></div><p class="font-medium text-gray-600 my-2">${q.title}</p></div>`;
+                }
+            }).join('');
+            
+            if (studentTimeChartInstance) studentTimeChartInstance.destroy();
+            const timeChartCtx = document.getElementById('studentTimeChart');
+            if (timeChartCtx) {
+                studentTimeChartInstance = new Chart(timeChartCtx.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: classData.progressChart.labels.slice(0, student.timeDistribution.length),
+                        datasets: [{ label: '停留时间(分钟)', data: student.timeDistribution, backgroundColor: 'rgba(81, 45, 109, 0.6)' }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { title: { display: true, text: '分钟' } } } }
+                });
+            }
+        }
+        
+        /**
+         * Modal and other utility functions.
+         */
+        function showModal(modalId) { document.getElementById(modalId).classList.add('active'); }
+        function closeModal(modalId) { document.getElementById(modalId).classList.remove('active'); }
+        function showQuestionDetail(type, id) {
+            const detail = classData.questions[type].find(q => q.id === id);
+            const modalContent = `<div class="flex justify-between items-start"><h3 class="text-xl font-bold text-gray-800 mb-4">P${detail.page} - ${detail.title}</h3><button onclick="closeModal('questionModal')" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="text-gray-700 space-y-4"><p><strong>类型:</strong> ${detail.type}</p><div><strong>题干:</strong><div class="mt-1 p-3 bg-gray-50 rounded-lg">${detail.content}</div></div>${detail.correct ? `<p><strong>参考答案:</strong> ${detail.correct}</p>` : ''}${detail.stats ? `<div><strong>作答统计:</strong><div class="mt-1 p-3 bg-gray-50 rounded-lg">${detail.stats}</div></div>` : ''}</div>`;
+            document.querySelector('#questionModal .modal-container').innerHTML = modalContent;
+            showModal('questionModal');
+        }
         function filterStudents() {
             const input = document.getElementById('studentSearch');
             const filter = input.value.toUpperCase();
             const table = document.getElementById('studentTable');
-            const tr = table.rows;
-            for (let i = 1; i < tr.length; i++) {
-                const td = tr[i].getElementsByTagName('td')[0];
+            const trs = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+            for (let i = 0; i < trs.length; i++) {
+                const td = trs[i].getElementsByTagName('td')[0];
                 if (td) {
-                    if (td.textContent.toUpperCase().indexOf(filter) > -1) { tr[i].style.display = ""; } else { tr[i].style.display = "none"; }
+                    trs[i].style.display = (td.textContent.toUpperCase().indexOf(filter) > -1) ? "" : "none";
                 }
             }
-        }
-        function sortTable(n) {
-            const table = document.getElementById("studentTable");
-            let rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-            switching = true;
-            dir = "asc"; 
-            while (switching) {
-                switching = false;
-                rows = table.rows;
-                for (i = 1; i < (rows.length - 1); i++) {
-                    shouldSwitch = false;
-                    x = rows[i].getElementsByTagName("TD")[n];
-                    y = rows[i + 1].getElementsByTagName("TD")[n];
-                    let xVal = x.dataset.sort || x.innerHTML;
-                    let yVal = y.dataset.sort || y.innerHTML;
-                    if (dir == "asc") { if (Number(xVal) > Number(yVal)) { shouldSwitch = true; break; }
-                    } else if (dir == "desc") { if (Number(xVal) < Number(yVal)) { shouldSwitch = true; break; } }
-                }
-                if (shouldSwitch) {
-                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                    switching = true;
-                    switchcount++;
-                } else { if (switchcount == 0 && dir == "asc") { dir = "desc"; switching = true; } }
-            }
-        }
-        function changeTab(event, tabID) {
-            let tabcontent = document.getElementsByClassName("tab-content");
-            for (let i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-                tabcontent[i].classList.remove("active");
-            }
-            let tablinks = document.getElementsByClassName("tab-button");
-            for (let i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
-            document.getElementById(tabID).style.display = "block";
-            document.getElementById(tabID).classList.add("active");
-            event.currentTarget.className += " active";
-            lucide.createIcons(); // Re-render icons if they are in the new tab
         }
     </script>
 </body>
