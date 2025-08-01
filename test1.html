@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>8.1看板demo</title>
+    <title>教师看板 MVP - 诊断版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -369,19 +369,16 @@
 
         /**
          * Main function to initialize the dashboard.
-         * This is the entry point for rendering all components.
          */
         function renderDashboard() {
             updateTime();
             setInterval(updateTime, 60000);
             
-            // Render all dynamic components
             renderStudentList();
             renderInsightTabs();
-            renderAllInsightPanes(); // Use the robust tab rendering method
+            renderAllInsightPanes(); 
             renderProgressChart();
             
-            // IMPORTANT: Initialize all icons after HTML is injected.
             lucide.createIcons();
         }
 
@@ -570,10 +567,24 @@
             if (progressChartInstance) {
                 progressChartInstance.destroy();
             }
+
+            // ✅ FIX: Replaced icons with text annotations
+            const originalLabels = classData.progressChart.labels;
+            const activityTypes = classData.progressChart.activityTypes;
+            const newLabels = originalLabels.map((label, index) => {
+                const activities = activityTypes[index] || [];
+                if (activities.length > 0) {
+                    // Shorten text ('测验题' -> '测验') and join with a comma
+                    const activityText = activities.map(type => type.replace('题', '')).join(', ');
+                    return `${label} (${activityText})`;
+                }
+                return label;
+            });
+
             progressChartInstance = new Chart(ctx.getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: classData.progressChart.labels,
+                    labels: newLabels, // Use the new labels with text annotations
                     datasets: [{
                         label: '学生人数',
                         data: classData.progressChart.values,
@@ -588,7 +599,12 @@
                     plugins: { legend: { display: false } },
                     scales: {
                         y: { beginAtZero: true, title: { display: true, text: '学生人数' }, ticks: { stepSize: 1, precision: 0 }},
-                        x: { grid: { display: false } }
+                        x: { 
+                            grid: { display: false },
+                            ticks: {
+                                font: { size: 11 } // Slightly smaller font to prevent labels from overlapping
+                            }
+                        }
                     }
                 }
             });
