@@ -3,707 +3,1001 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>教师看板 MVP - 诊断版</title>
+    <title>多维度学生追踪看板</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f7f7f9;
+            background-color: #f8f9fa;
         }
         :root {
             --theme-purple: #512D6D;
-            --theme-purple-light: #f3eef7;
+            --theme-teal: #0d9488;
         }
         .theme-purple-text { color: var(--theme-purple); }
-        .theme-purple-border { border-color: var(--theme-purple); }
         .theme-purple-bg { background-color: var(--theme-purple); }
         
         .card {
             background-color: white;
-            border-radius: 1rem;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
-            transition: all 0.3s ease;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
         }
-        .info-icon, .status-tag {
+        .hidden { display: none; }
+
+        .expand-row {
+            transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
+            max-height: 0;
+            overflow: hidden;
+            background-color: #f8f9fa;
+        }
+        .expand-row.expanded {
+            max-height: 120px;
+        }
+        .roster-row:not(:last-child) {
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .chevron-icon {
+            transition: transform 0.3s;
+        }
+        .expanded .chevron-icon {
+            transform: rotate(90deg);
+        }
+        .sortable-header {
             cursor: pointer;
-            position: relative;
         }
-        .tooltip {
-            visibility: hidden;
-            width: max-content;
-            max-width: 240px;
-            background-color: #333;
-            color: #fff;
-            text-align: left;
-            border-radius: 6px;
-            padding: 8px 12px;
-            position: absolute;
-            z-index: 50;
-            bottom: 125%;
-            left: 50%;
-            transform: translateX(-50%);
-            opacity: 0;
-            transition: opacity 0.3s;
-            font-size: 0.8rem;
-            font-weight: normal;
-            line-height: 1.5;
-        }
-        .tooltip.tooltip-right {
-            left: auto;
-            right: 0;
-            transform: translateX(0);
-        }
-        .info-icon:hover .tooltip, .status-tag:hover .tooltip {
-            visibility: visible;
-            opacity: 1;
-        }
-        .sortable {
-            position: relative;
-            padding-right: 1.5rem; /* Space for arrow */
-        }
-        .sortable:hover {
-            cursor: pointer;
-            background-color: #f9fafb;
-        }
-        .sort-arrow {
-            position: absolute;
-            right: 0.5rem;
-            top: 50%;
-            transform: translateY(-50%);
-            opacity: 0.5;
+        .sort-icon {
+            opacity: 0.4;
             transition: opacity 0.2s;
         }
-        .sortable.sorted .sort-arrow {
+        .sortable-header.sorted .sort-icon {
             opacity: 1;
         }
 
-        .tab-button {
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            font-weight: 500;
-            color: #6b7280;
-            transition: all 0.2s;
-        }
-        .tab-button.active {
-            color: var(--theme-purple);
-            background-color: var(--theme-purple-light);
-        }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
 
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
+        /* Timeline Styles */
+        .timeline-container {
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 40;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s, visibility 0.3s;
+            width: 100%;
+            height: 60px;
+            padding: 0 0.5rem;
+            gap: 2px;
         }
-        .modal-overlay.active {
-            opacity: 1;
-            visibility: visible;
+        .timeline-segment {
+            position: relative;
+            flex-grow: 1;
+            flex-basis: 0;
+            min-width: 0;
+            height: 24px;
+            background-color: #e5e7eb;
+            border-radius: 3px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
-        .modal-container {
-            background-color: white;
-            padding: 2rem;
-            border-radius: 1rem;
-            width: 90%;
-            max-width: 600px;
-            max-height: 90vh;
-            overflow-y: auto;
-            transform: scale(0.95);
-            transition: transform 0.3s;
+        
+        .timeline-segment.lecture-learned { background-color: #c4b5fd; }
+        .timeline-segment.lecture-abnormal-timeout { background-color: #fef08a; }
+        .timeline-segment.lecture-abnormal-incorrect { background-color: #fca5a5; }
+        .timeline-segment.test-correct { background-color: #5eead4; }
+        .timeline-segment.test-incorrect { background-color: #fb7185; }
+        .timeline-segment.test-inprogress-unanswered { background-color: #e5e7eb; }
+
+        @keyframes pulse-purple-border {
+            0% { box-shadow: 0 0 0 0 rgba(81, 45, 109, 0.8); }
+            70% { box-shadow: 0 0 0 7px rgba(81, 45, 109, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(81, 45, 109, 0); }
         }
-        .modal-overlay.active .modal-container {
-            transform: scale(1);
+        .timeline-segment.focused {
+            animation: pulse-purple-border 1.8s infinite;
         }
-        .hidden { display: none; }
+
+        @keyframes pulse-teal-border {
+            0% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.8); }
+            70% { box-shadow: 0 0 0 7px rgba(13, 148, 136, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0); }
+        }
+        .timeline-segment.test-inprogress-current {
+            animation: pulse-teal-border 1.8s infinite;
+        }
+
+        .timeline-segment .activity-icon { width: 1.25rem; height: 1.25rem; opacity: 1; }
+
+        .global-tooltip {
+            visibility: hidden; opacity: 0; position: fixed; background-color: #262626;
+            color: white; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.875rem;
+            width: 280px; z-index: 100; transition: opacity 0.2s; pointer-events: none;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .tooltip-activity {
+            border-top: 1px solid #4b5563; margin-top: 0.5rem; padding-top: 0.5rem;
+        }
+        
+        /* Module Navigation */
+        .module-nav-wrapper {
+            display: flex;
+            align-items: center;
+            padding: 4px 1rem;
+            background-color: #f1f5f9;
+        }
+        .module-nav-container {
+            display: flex;
+            flex-grow: 1;
+            height: 6px;
+            background-color: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .module-nav-segment {
+            flex-grow: 1;
+            cursor: pointer;
+            border-right: 1px solid #f1f5f9;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .module-nav-segment:last-child {
+            border-right: none;
+        }
+        .module-nav-segment.nav-lecture { background-color: #d1c4e9; }
+        .module-nav-segment.nav-test { background-color: #b2dfdb; }
+        .module-nav-segment.nav-assignment { background-color: #ffcc80; }
+        .module-nav-segment.nav-unlearned { background-color: #e5e7eb; }
+
+        .module-nav-segment.nav-viewed::before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background-color: rgba(81, 45, 109, 0.6);
+        }
+        .module-nav-segment.nav-current::after {
+            content: '';
+            display: block;
+            position: relative;
+            top: -7px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid var(--theme-purple);
+        }
+
+        /* View Switcher */
+        .view-switcher button {
+            transition: all 0.2s ease-in-out;
+        }
+        .view-switcher button.active {
+            background-color: var(--theme-purple);
+            color: white;
+        }
+
+        /* Module Overview Progress Bar */
+        .module-progress-container {
+            display: flex;
+            width: 100%;
+            height: 24px;
+            background-color: #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .module-progress-segment {
+            flex-grow: 1; /* This makes them equal width */
+            height: 100%;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            border-right: 2px solid #f8f9fa;
+            position: relative;
+        }
+        .module-progress-segment:last-child {
+            border-right: none;
+        }
+        .module-progress-segment:hover {
+            transform: scale(1.02);
+            z-index: 10;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        .module-progress-segment.type-lecture { background-color: #818cf8; }
+        .module-progress-segment.type-test { background-color: #2dd4bf; }
+        .module-progress-segment.type-assignment { background-color: #fb923c; }
+        .module-progress-segment.type-unstarted { background-color: #d1d5db; }
+
+        @keyframes pulse-shadow-purple {
+            0% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(129, 140, 248, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0); }
+        }
+
+        .module-progress-segment.current-module {
+            animation: pulse-shadow-purple 2s infinite;
+            z-index: 11;
+            border-radius: 6px; /* To make shadow circular */
+        }
+        
+        /* Detail View & Modal */
+        #detail-view { padding: 1rem; }
+        .stat-card { background-color: white; border-radius: 0.5rem; padding: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+        .modal-content { background-color: white; padding: 2rem; border-radius: 0.75rem; width: 90%; max-width: 640px; max-height: 90vh; overflow-y: auto; position: relative; }
+
     </style>
 </head>
-<body class="antialiased">
-    <div id="dashboard-view" class="min-h-screen p-4 md:p-6">
-        <header class="flex flex-wrap justify-between items-center mb-6 gap-4">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-800">教师看板</h1>
-                <p class="text-gray-500">
-                    <span>课程：产品经理的必修课</span>
-                    <span class="mx-2">|</span>
-                    <span id="current-module" class="font-semibold theme-purple-text">模块：市场分析与定位</span>
-                </p>
-            </div>
-            <div class="flex items-center space-x-4">
-                <div class="flex items-center text-gray-600 bg-white px-3 py-2 rounded-lg shadow-sm">
-                    <i data-lucide="clock" class="w-5 h-5 mr-2 theme-purple-text"></i>
-                    <span id="current-time"></span>
-                </div>
-                <button class="theme-purple-bg text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:opacity-90 transition flex items-center">
-                    <i data-lucide="log-out" class="w-4 h-4 mr-2"></i>
-                    结束授课
-                </button>
-            </div>
-        </header>
+<body class="antialiased p-4">
 
-        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <div class="lg:col-span-2 flex flex-col gap-6">
-                
-                <section class="card">
-                    <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
-                        <i data-lucide="gauge-circle" class="w-6 h-6 mr-2 theme-purple-text"></i>
-                        课堂节奏仪表盘
-                    </h2>
-                    <p class="text-sm text-gray-500 mb-6">实时洞察班级整体学习状态</p>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                        <div class="bg-purple-50 border-l-4 theme-purple-border p-4 rounded-lg">
-                            <p class="text-sm text-gray-500 flex items-center">平均进度 
-                                <span class="info-icon ml-1">
-                                    <i data-lucide="info" class="w-3 h-3"></i>
-                                    <span class="tooltip">全班学生所在PPT页码的平均值</span>
-                                </span>
-                            </p>
-                            <p class="text-2xl font-bold theme-purple-text">24 / 50 页</p>
-                        </div>
-                        <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
-                            <p class="text-sm text-gray-500 flex items-center">整体正确率 
-                                <span class="info-icon ml-1">
-                                    <i data-lucide="info" class="w-3 h-3"></i>
-                                    <span class="tooltip">所有已作答【客观题】的总正确数 / 总作答数</span>
-                                </span>
-                            </p>
-                            <p class="text-2xl font-bold text-green-600">76%</p>
-                        </div>
-                        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-                            <p class="text-sm text-gray-500 flex items-center">总互动次数 
-                                <span class="info-icon ml-1">
-                                    <i data-lucide="info" class="w-3 h-3"></i>
-                                    <span class="tooltip">学生完成测验、参与讨论的总次数</span>
-                                </span>
-                            </p>
-                            <p class="text-2xl font-bold text-blue-600">512 次</p>
-                        </div>
-                    </div>
+    <div id="globalTooltip" class="global-tooltip"></div>
+    <div id="modal-container"></div>
 
+    <div class="mb-4 p-1 bg-slate-200 rounded-lg inline-flex view-switcher">
+        <button id="roster-view-btn" onclick="switchView('roster-view', 'roster-view-btn')" class="px-4 py-2 rounded-md text-sm font-medium active">学生总览</button>
+        <button id="module-overview-btn" onclick="switchView('module-overview-view', 'module-overview-btn')" class="px-4 py-2 rounded-md text-sm font-medium">模块总览</button>
+    </div>
+
+    <!-- Main Views Container -->
+    <div id="main-content">
+        <!-- Main Roster View -->
+        <div id="roster-view">
+            <div class="p-3 md:p-6 bg-white rounded-xl shadow-sm">
+                <header class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div>
-                        <h3 class="font-semibold text-gray-700 mb-2">学习进度分布</h3>
-                        <div class="h-64">
-                            <canvas id="progressChart"></canvas>
-                        </div>
+                        <h1 class="text-2xl font-bold text-gray-800">学生总览</h1>
+                        <p class="text-sm text-gray-500">点击箭头展开模块学习详情</p>
                     </div>
-                </section>
-
-                <section class="card">
-                     <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
-                        <i data-lucide="siren" class="w-6 h-6 mr-2 theme-purple-text"></i>
-                        内容难点洞察
-                    </h2>
-                    <p class="text-sm text-gray-500 mb-4">点击列表查看详情，数据按最关键指标排序</p>
-                    
-                    <div class="border-b border-gray-200 mb-4">
-                        <nav id="insight-tabs" class="-mb-px flex space-x-4" aria-label="Tabs">
-                        </nav>
+                    <div class="flex items-center gap-3">
+                        <div class="relative"><input type="text" id="studentSearchRoster" onkeyup="filterRoster()" class="w-full pl-9 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 text-sm" placeholder="搜索学生..."><i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i></div>
+                        <button id="toggleAllBtn" onclick="toggleAllRows(this)" class="flex items-center gap-2 px-3 py-2 bg-white border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"><i data-lucide="chevrons-down-up" class="w-4 h-4"></i><span id="toggleAllText">全部展开</span></button>
                     </div>
-
-                    <div id="insight-content" class="max-h-80 overflow-y-auto pr-2">
+                </header>
+                <main class="card p-0">
+                    <div class="overflow-x-auto">
+                        <table id="studentRosterTable" class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-3 w-10"></th>
+                                    <th class="px-4 py-3">学生姓名</th>
+                                    <th class="px-4 py-3">当前课程</th>
+                                    <th class="px-4 py-3">模块类别</th>
+                                    <th class="px-4 py-3 sortable-header" onclick="sortStudents('moduleDetail')">
+                                        <div class="flex items-center gap-1">模块详情 <span id="sort-icon-moduleDetail" class="sort-icon"><i data-lucide="arrow-up-down" class="w-3 h-3"></i></span></div>
+                                    </th>
+                                    <th class="px-4 py-3 sortable-header" onclick="sortStudents('progress')">
+                                        <div class="flex items-center gap-1">进度 <span id="sort-icon-progress" class="sort-icon"><i data-lucide="arrow-up-down" class="w-3 h-3"></i></span></div>
+                                    </th>
+                                    <th class="px-4 py-3">综合状态</th>
+                                </tr>
+                            </thead>
+                            <tbody id="roster-table-body"></tbody>
+                        </table>
                     </div>
-                </section>
+                </main>
             </div>
-
-            <div class="card lg:col-span-1 flex flex-col">
-                <h2 class="text-xl font-bold text-gray-800 mb-1 flex items-center">
-                    <i data-lucide="users" class="w-6 h-6 mr-2 theme-purple-text"></i>
-                    学生个体清单
-                </h2>
-                <div class="relative mb-4">
-                    <input type="text" id="studentSearch" onkeyup="filterStudents()" class="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300" placeholder="搜索学生姓名...">
-                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
-                </div>
-                <div class="flex-grow overflow-y-auto">
-                    <table id="studentTable" class="w-full text-sm text-left text-gray-500">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
-                            <tr>
-                                <th scope="col" class="px-3 py-3 sortable" onclick="sortTable(0)">姓名<span class="sort-arrow"></span></th>
-                                <th scope="col" class="px-2 py-3 sortable" onclick="sortTable(1)">进度<span class="sort-arrow"></span></th>
-                                <th scope="col" class="px-2 py-3 sortable" onclick="sortTable(2)">得分<span class="sort-arrow"></span></th>
-                                <th scope="col" class="px-3 py-3">状态</th>
-                            </tr>
-                        </thead>
-                        <tbody id="studentTableBody">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <div id="student-report-view" class="hidden min-h-screen p-4 md:p-6">
-        <header class="flex justify-between items-center mb-6">
-            <div>
-                <button onclick="navigateToDashboard()" class="flex items-center text-gray-600 hover:text-purple-600 font-semibold">
-                    <i data-lucide="arrow-left" class="w-5 h-5 mr-2"></i>
-                    返回教师看板
-                </button>
-                <h1 id="student-report-name" class="text-3xl font-bold text-gray-800 mt-2"></h1>
-            </div>
-        </header>
-        <main class="flex flex-col gap-6">
-            <section class="card">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center md:text-left">
-                    <div class="flex items-center justify-center md:justify-start">
-                        <div class="bg-purple-100 p-3 rounded-full">
-                            <i data-lucide="user-circle" class="w-10 h-10 theme-purple-text"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h2 id="student-report-name-main" class="text-2xl font-bold text-gray-800"></h2>
-                            <p class="text-gray-500">学情总览</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-around md:col-span-2 bg-gray-50 p-4 rounded-lg">
-                        <div>
-                            <p class="text-sm text-gray-600">当前进度</p>
-                            <p id="student-report-progress" class="font-bold text-2xl theme-purple-text"></p>
-                        </div>
-                        <div class="border-l h-10 mx-4"></div>
-                        <div>
-                            <p class="text-sm text-gray-600">客观题正确率</p>
-                            <p id="student-report-score" class="font-bold text-2xl text-green-600"></p>
-                        </div>
-                        <div class="border-l h-10 mx-4"></div>
-                        <div>
-                            <p class="text-sm text-gray-600">总学习时长</p>
-                            <p id="student-report-time" class="font-bold text-2xl text-blue-600"></p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-            
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-2 card">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">详细学习轨迹</h2>
-                    <div id="student-activity-log" class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                    </div>
-                </div>
-                <div class="lg:col-span-1 card">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">停留时间分布</h2>
-                    <div class="h-64">
-                        <canvas id="studentTimeChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <div id="questionModal" class="modal-overlay" onclick="closeModal('questionModal')">
-        <div class="modal-container" onclick="event.stopPropagation()">
         </div>
+
+        <!-- Module Overview View -->
+        <div id="module-overview-view" class="hidden">
+             <div class="p-3 md:p-6 bg-white rounded-xl shadow-sm">
+                <header class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">模块总览</h1>
+                        <p class="text-sm text-gray-500">查看所有学生的课程模块进度。悬浮查看详情。</p>
+                    </div>
+                </header>
+                <main class="card p-0">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 w-40">学生姓名</th>
+                                    <th class="px-6 py-3 w-64">课程名称</th>
+                                    <th class="px-6 py-3">模块进度</th>
+                                </tr>
+                            </thead>
+                            <tbody id="module-overview-body"></tbody>
+                        </table>
+                    </div>
+                </main>
+            </div>
+        </div>
+        
+        <!-- Student Detail View -->
+        <div id="detail-view" class="hidden"></div>
+
     </div>
-    
+
     <script>
-        const classData = {
-            totalStudents: 12,
-            progressChart: {
-                labels: ['1-10页', '11-20', '21-30', '31-40', '41-50'],
-                values: [3, 4, 2, 2, 1],
-                activityTypes: [['测验题'], ['讨论'], ['测验题', '简答题'], ['讨论'], ['测验题']]
-            },
-            questions: {
-                objective: [
-                    { id: 1, page: 8, title: '市场定位四要素是什么？', type: '选择题', errorRate: 75, completed: 10, content: 'A. 产品、价格、渠道、促销<br>B. 用户、场景、需求、方案<br>C. ...<br>D. ...', correct: 'A', stats: '班级选择A: 25%, B: 40%, C: 15%, D: 20%' },
-                    { id: 2, page: 15, title: '关于MVP的定义，哪个是错误的？', type: '判断题', errorRate: 61, completed: 9, content: 'MVP是为了用最小成本验证核心假设。', correct: '正确', stats: '选择正确: 39%, 选择错误: 61%' },
-                    { id: 3, page: 42, title: '波特五力模型不包含以下哪个？', type: '选择题', errorRate: 55, completed: 5, content: 'A. 供应商议价能力<br>B. 替代品的威胁<br>C. 宏观经济环境<br>D. 新进入者的威胁', correct: 'C', stats: '...' },
-                ],
-                subjective: [
-                    { id: 1, page: 25, title: '请为你的产品设计一个增长飞轮', type: '简答题', avgTime: '3分45秒', completed: 6, content: '请结合AARRR模型，为你负责的产品设计一个增长飞轮，并说明各环节的关键指标。' },
-                    { id: 2, page: 38, title: '简述SWOT分析的四个维度。', type: '简答题', avgTime: '2分15秒', completed: 4, content: '请分别解释Strengths, Weaknesses, Opportunities, Threats的含义。' }
-                ],
-                discussion: [
-                    { id: 1, page: 12, title: '什么是好产品？', type: '讨论', avgWords: 18, avgTime: '2分30秒', target: 20, completed: 11, content: '请从用户价值、商业价值、产品体验等角度，谈谈你对“好产品”的理解。' },
-                    { id: 2, page: 22, title: '分析案例A优缺点', type: '讨论', avgWords: 85, avgTime: '4分15秒', target: 50, completed: 7, content: '请结合所学知识，分析案例A的优缺点。' },
-                    { id: 3, page: 33, title: '你认为AI对产品经理工作最大的改变是什么？', type: '讨论', avgWords: 120, avgTime: '5分02秒', target: 100, completed: 5, content: '请从效率提升、能力要求、工作流程等角度展开讨论。' }
-                ]
-            },
-            students: {
-                '张三': { progress: '18/50', score: '85%', totalTime: '25分钟', timeDistribution: [2, 3, 4, 8, 8], activityLog: [
-                    { qId: 1, type: 'objective', result: 'correct', studentAnswer: 'A', correctAnswer: 'A', time: '30秒' },
-                    { qId: 1, type: 'discussion', studentAnswer: '我认为好产品就是能解决用户痛点，并且好用的产品。', time: '2分10秒', wordCount: 20 },
-                    { qId: 2, type: 'objective', result: 'correct', studentAnswer: '正确', correctAnswer: '正确', time: '45秒' }
-                ]},
-                '李四': { progress: '5/50', score: '70%', totalTime: '18分钟', timeDistribution: [5, 13], activityLog: [ { qId: 1, type: 'objective', result: 'incorrect', studentAnswer: 'B', correctAnswer: 'A', time: '1分15秒' } ]},
-                '王五': { progress: '45/50', score: '95%', totalTime: '35分钟', timeDistribution: [1, 2, 3, 5, 6, 10, 8], activityLog: [/* ... */]},
-                '赵六': { progress: '8/50', score: '40%', totalTime: '22分钟', timeDistribution: [3, 19], activityLog: [ { qId: 1, type: 'objective', result: 'incorrect', studentAnswer: 'D', correctAnswer: 'A', time: '3分30秒', note: '连续答错2次' } ]},
-                '钱七': { progress: '50/50', score: '50%', totalTime: '45分钟', timeDistribution: [2,3,4,5,6,7,8], activityLog: [
-                    { qId: 1, type: 'objective', result: 'correct', studentAnswer: 'A', correctAnswer: 'A', time: '25秒' },
-                    { qId: 1, type: 'discussion', studentAnswer: '好产品应该具备用户价值、商业价值和创新性。', time: '3分15秒', wordCount: 95 },
-                    { qId: 2, type: 'objective', result: 'incorrect', studentAnswer: '错误', correctAnswer: '正确', time: '20秒' },
-                    { qId: 2, type: 'discussion', studentAnswer: '案例A的优点在于快速验证了市场需求...', time: '4分05秒', wordCount: 45 },
-                    { qId: 1, type: 'subjective', studentAnswer: '我的产品的增长飞轮是...', time: '5分30秒' }
-                ]},
-                '孙八': { progress: '0/50', score: 'N/A', totalTime: '2分钟', timeDistribution: [], activityLog: []},
-                '周吴': { progress: '28/50', score: '88%', totalTime: '31分钟', timeDistribution: [4, 8, 19], activityLog: [/*...*/] },
-                '郑冯': { progress: '15/50', score: '100%', totalTime: '19分钟', timeDistribution: [5, 14], activityLog: [/*...*/] },
-                '陈褚': { progress: '35/50', score: '65%', totalTime: '40分钟', timeDistribution: [3, 7, 10, 20], activityLog: [/*...*/] },
-                '卫蒋': { progress: '19/50', score: '75%', totalTime: '28分钟', timeDistribution: [6, 13, 9], activityLog: [/*...*/] },
-                '沈韩': { progress: '48/50', score: '92%', totalTime: '55分钟', timeDistribution: [5,10,12,13,15], activityLog: [/*...*/] },
-                '杨朱': { progress: '0/50', score: 'N/A', totalTime: '10分钟', timeDistribution: [], activityLog: [/*...*/] }
+        // --- MOCK DATA & STATE ---
+        let activeTimers = {};
+        let sortState = { key: null, direction: 'asc' };
+        
+        // --- MOCK DATA (ENHANCED) ---
+        const createModules = (studentId, courseType = 'productManager') => {
+            if (courseType === 'dataScience') {
+                 return [
+                    { type: '讲义', name: '模块1: Python基础', status: '已完成', timeSpent: 7200, total: 25, completed: 25 },
+                    { type: '讲义', name: '模块2: Pandas入门', status: '已完成', timeSpent: 9500, total: 30, completed: 30 },
+                    { type: '测验', name: '测验2: Pandas测验', status: '进行中', timeSpent: 1800, total: 15, completed: 8, questions: Array.from({length: 15}, (_, i) => ({ q: i + 1, text: `关于Pandas的第${i+1}个问题`, status: i < 8 ? 'answered' : 'unanswered', result: i < 6 ? 'correct' : 'incorrect', time: 120 })) },
+                    { type: '作业', name: '作业3: 数据清洗', status: '未开始', timeSpent: 0, total: 1, completed: 0 },
+                ];
             }
+            // Default: Product Manager course
+            return [
+                { type: '讲义', name: '模块1.1: 市场分析', status: '已完成', timeSpent: 5430, total: 20, completed: 20, modulePages: Array.from({length: 20}, (_, i) => ({ page: i + 1, title: `第${i+1}页`, time: '5m 3s', timeValue: 303, chatCount: 2, activities: [], isAbnormal: false })) },
+                { type: '测验', name: '测验1.2: 市场分析测验', status: '已完成', timeSpent: 1250, score: '8/10', total: 10, completed: 10, questions: Array.from({length: 10}, (_, i) => ({ q: i + 1, text: `市场分析的第${i+1}个问题`, status: 'answered', result: i < 8 ? 'correct' : 'incorrect', time: 60 })) },
+                { type: '讲义', name: '模块2.1: 用户需求挖掘', status: '进行中', timeSpent: 2100, total: 20, completed: 9, modulePages: (()=>{ let p = Array.from({length: 20}, (_, i) => ({ page: i + 1, title: `第${i+1}页`, time: null, timeValue: 0, chatCount: 0, activities: [], isAbnormal: false })); for(let i=0; i<9; i++) { p[i].timeValue = Math.floor(Math.random() * 240) + 60; p[i].time = `${Math.floor(p[i].timeValue / 60)}m ${p[i].timeValue % 60}s`; } p[2].activities.push({type: 'interactive_question', result: 'correct'}); p[7].activities.push({type: 'discussion_pending', discussionTime: 600, wordCount: 150, posts: 3 }); p[8].time = '进行中'; return p; })() },
+                { type: '作业', name: '作业2.2: 用户画像设计', status: '未提交', timeSpent: 0, total: 1, completed: 0 },
+                { type: '测验', name: '测验2.3: 需求分析测验', status: '未开始', timeSpent: 0, total: 10, completed: 0, questions: Array.from({length: 10}, (_, i) => ({ q: i + 1, text: `需求分析的第${i+1}个问题`, status: 'unanswered', result: null, time: 0 })) }
+            ];
         };
 
-        // Global state for table sorting
-        let sortState = { col: -1, dir: 'asc' };
-        
-        // --- Main Execution ---
-        document.addEventListener('DOMContentLoaded', () => {
-            renderDashboard();
+        const mockData = {
+            students: [
+                { id: 1, name: '张三', overallStatus: '正常', courses: [{ courseId: 101, courseName: '产品经理的必修课', currentModuleIndex: 2, modules: createModules(1) }], events: [{ts: '2023-10-26 10:00', text: '开始学习课程: 产品经理的必修课', type: 'system'}, {ts: '2023-10-26 11:30', text: '完成测验: 市场分析测验, 得分 8/10', type: 'interaction'}] },
+                { id: 2, name: '李四', overallStatus: '正常', courses: [{ courseId: 201, courseName: '数据科学入门', currentModuleIndex: 2, modules: createModules(2, 'dataScience') }], events: [{ts: '2023-10-27 09:00', text: '开始学习课程: 数据科学入门', type: 'system'}] },
+                { id: 4, name: '刘六', overallStatus: '异常', courses: [{ courseId: 101, courseName: '产品经理的必修课', currentModuleIndex: 2, modules: (()=>{ let m = createModules(4); m[1].score = '4/10'; m[1].isAbnormal = true; m[2].completedPages = 1; m[2].modulePages[0].time = '进行中'; return m; })() }], events: [{ts: '2023-10-26 14:00', text: '测验得分较低: 市场分析测验', type: 'abnormal'}] },
+                { id: 5, name: '赵七', overallStatus: '异常', courses: [{ courseId: 101, courseName: '产品经理的必修课', currentModuleIndex: 0, modules: (()=>{ let m = createModules(5); m[0].status = '进行中'; m[0].completedPages = 5; m[0].modulePages = Array.from({length: 20}, (_, i) => ({ page: i + 1, title: `第${i+1}页`, time: null, timeValue: 0, chatCount: 0, activities: [], isAbnormal: false })); for(let i=0; i<5; i++){m[0].modulePages[i].time='3m+'} m[0].modulePages[3].activities.push({type: 'interactive_question', result: 'incorrect'}); m[0].modulePages[3].isAbnormal = true; m[0].modulePages[5].time = '进行中'; return m; })() }], events: [{ts: '2023-10-28 10:20', text: '在 模块1.1: 市场分析 第4页 互动题回答错误', type: 'abnormal'}]},
+                { id: 6, name: '孙八', overallStatus: '正常', courses: [{ courseId: 101, courseName: '产品经理的必修课', currentModuleIndex: 1, modules: (()=>{ let m = createModules(6); m[0].status = '已完成'; m[1].status = '进行中'; m[1].timeElapsed = 320; m[1].questions = Array.from({length: 10}, (_, i) => ({ q: i + 1, status: i === 5 ? 'in_progress' : 'unanswered', result: null, time: 0 })); return m; })() }], events: [] },
+                { id: 7, name: '周九', overallStatus: '超时', courses: [{ courseId: 101, courseName: '产品经理的必修课', currentModuleIndex: 0, modules: (()=>{ let m = createModules(7); m[0].status = '进行中'; m[0].isAbnormal = true; m[0].completedPages = 4; m[0].modulePages = Array.from({length: 18}, (_, i) => ({ page: i + 1, title: `第${i+1}页`, time: null, timeValue: 0, chatCount: 0, activities: [], isAbnormal: false })); for(let i=0; i<4; i++){m[0].modulePages[i].time='10m+'} m[0].modulePages[4].time = '进行中(>30m)'; m[0].modulePages[4].isAbnormal = true; return m; })() }], events: [{ts: '2023-10-28 11:00', text: '在 模块1.1: 市场分析 第5页 停留超过30分钟', type: 'abnormal'}] }
+            ]
+        };
+
+        // --- UTILITY & RENDER FUNCTIONS ---
+        function formatTime(seconds) {
+            if (seconds < 60) return `${seconds}s`;
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            if (m < 60) return `${m}m ${s}s`;
+            const h = Math.floor(m/60);
+            const rm = m % 60;
+            return `${h}h ${rm}m`;
+        }
+        function mapTimeToOpacity(seconds) { if (seconds === 0) return 1; const maxSeconds = 600; const minOpacity = 0.4; const maxOpacity = 1.0; return Math.min(seconds, maxSeconds) / maxSeconds * (maxOpacity - minOpacity) + minOpacity; }
+
+        document.addEventListener('DOMContentLoaded', () => { 
+            renderRoster(); 
+            renderModuleOverview();
+            lucide.createIcons(); 
         });
 
-        /**
-         * Main function to initialize the dashboard.
-         */
-        function renderDashboard() {
-            updateTime();
-            setInterval(updateTime, 60000);
-            
-            renderStudentList();
-            renderInsightTabs();
-            renderAllInsightPanes(); 
-            renderProgressChart();
-            
-            lucide.createIcons();
+        function getStatusBadge(status, text) {
+            let color = 'bg-gray-100 text-gray-800';
+            if (status === '已完成' || status === '已提交') color = 'bg-green-100 text-green-800';
+            if (status === '进行中') color = 'bg-blue-100 text-blue-800';
+            if (status === '卡点' || status === '待批改' || status === '超时' || status === '异常') color = 'bg-yellow-100 text-yellow-800';
+            if (status === '掉队' || status === '未提交' || status === '未开始') color = 'bg-red-100 text-red-800';
+            if (status === '讨论中') color = 'bg-sky-100 text-sky-800';
+            if (status === '讲义') color = 'bg-indigo-100 text-indigo-800';
+            if (status === '测验') color = 'bg-teal-100 text-teal-800';
+            if (status === '作业') color = 'bg-orange-100 text-orange-800';
+            return `<span class="text-xs font-medium px-2 py-0.5 rounded-full ${color}">${text || status}</span>`;
         }
 
-        /**
-         * Updates the clock.
-         */
-        function updateTime() {
-            const timeElement = document.getElementById('current-time');
-            if (timeElement) {
-                const now = new Date();
-                timeElement.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        function getActivityTypeName(type) {
+            switch(type) {
+                case 'interactive_question': return '互动题';
+                case 'subjective': return '主观题';
+                case 'discussion_pending': return '参与讨论';
+                default: return type;
+            }
+        }
+        
+        // --- VIEW SWITCHER ---
+        function switchView(viewId, buttonIdToActivate) {
+            document.getElementById('roster-view').classList.add('hidden');
+            document.getElementById('module-overview-view').classList.add('hidden');
+            document.getElementById('detail-view').classList.add('hidden');
+            document.getElementById(viewId).classList.remove('hidden');
+
+            document.querySelectorAll('.view-switcher button').forEach(btn => btn.classList.remove('active'));
+            if(buttonIdToActivate) {
+                document.getElementById(buttonIdToActivate).classList.add('active');
             }
         }
 
-        /**
-         * Renders the student list table.
-         */
-        function renderStudentList() {
-            const tbody = document.getElementById('studentTableBody');
-            tbody.innerHTML = Object.keys(classData.students).map(name => {
-                const s = classData.students[name];
-                const progress = parseInt(s.progress);
-                let statusTag = '';
-                let progressCell = '';
-                let scoreCell = '';
-
-                if (progress === 0) {
-                    progressCell = `<td class="px-2 py-3 text-gray-400" data-sort="0">未开始</td>`;
-                    scoreCell = `<td class="px-2 py-3 text-gray-400" data-sort="0">未开始</td>`;
-                    statusTag = `<span class="status-tag bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded-full">未开始</span>`;
-                } else {
-                    progressCell = `<td class="px-2 py-3" data-sort="${progress}">${s.progress}</td>`;
-                    scoreCell = `<td class="px-2 py-3" data-sort="${parseInt(s.score) || 0}">${s.score}</td>`;
-                    if (s.progress === '50/50') {
-                        statusTag = `<span class="status-tag bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">已完成</span>`;
-                    } else if (progress > 40) {
-                        statusTag = `<span class="status-tag bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">一马当先<span class="tooltip tooltip-right">当前进度(${s.progress})显著高于班级平均进度(24/50)。</span></span>`;
-                    } else if (progress < 10) {
-                        statusTag = `<span class="status-tag bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">进度落后<span class="tooltip tooltip-right">当前进度(${s.progress})显著低于班级平均进度(24/50)。</span></span>`;
-                    }
-                }
+        // --- ROSTER VIEW LOGIC ---
+        function renderRoster(students = mockData.students) {
+            Object.values(activeTimers).forEach(clearInterval);
+            activeTimers = {};
+            const tbody = document.getElementById('roster-table-body');
+            if (!tbody) return;
+            tbody.innerHTML = students.map(s => {
+                const course = s.courses[0];
+                const module = course.modules[course.currentModuleIndex];
                 
                 return `
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-3 py-3 font-medium text-gray-900"><a href="#" onclick="navigateToStudentReport('${name}'); return false;" class="theme-purple-text hover:underline">${name}</a></td>
-                        ${progressCell}
-                        ${scoreCell}
-                        <td class="px-3 py-3">${statusTag}</td>
+                    <tr class="roster-row" data-main-row="true" data-student-id="${s.id}">
+                        <td class="px-3 py-3"><button onclick="toggleExpand(this)" class="p-1 rounded-full hover:bg-gray-200"><i data-lucide="chevron-right" class="chevron-icon w-5 h-5 text-gray-500"></i></button></td>
+                        <td class="px-4 py-3 font-medium"><a href="#" onclick="event.preventDefault(); showDetailView(${s.id})" class="text-purple-600 hover:underline">${s.name}</a></td>
+                        <td class="px-4 py-3">${course.courseName}</td>
+                        <td class="px-4 py-3" id="module-type-cell-${s.id}">${renderModuleType(module)}</td>
+                        <td class="px-4 py-3 text-gray-700" id="module-detail-cell-${s.id}">${module.name}</td>
+                        <td class="px-4 py-3" id="progress-cell-${s.id}">${renderProgress(s.id, module)}</td>
+                        <td class="px-4 py-3">${getStatusBadge(s.overallStatus)}</td>
                     </tr>
+                    <tr class="roster-row"><td colspan="7" class="p-0"><div id="expand-row-${s.id}" class="expand-row"></div></td></tr>
                 `;
             }).join('');
-             lucide.createIcons();
+            lucide.createIcons();
+            updateSortIcons();
         }
 
-        /**
-         * Sorts the student table by a given column index 'n'.
-         */
-        function sortTable(n) {
-            const table = document.getElementById('studentTable');
-            const tbody = table.tBodies[0];
-            const rows = Array.from(tbody.rows);
-            const headers = table.tHead.rows[0].cells;
-            
-            const currentDir = sortState.col === n ? (sortState.dir === 'asc' ? 'desc' : 'asc') : 'asc';
-            sortState = { col: n, dir: currentDir };
-            
-            rows.sort((a, b) => {
-                const aCell = a.cells[n];
-                const bCell = b.cells[n];
-                const aVal = aCell.dataset.sort || aCell.textContent;
-                const bVal = bCell.dataset.sort || bCell.textContent;
-                const isNumeric = aCell.dataset.sort !== undefined;
-                
-                let comparison = 0;
-                if (isNumeric) {
-                    comparison = parseFloat(aVal) - parseFloat(bVal);
-                } else {
-                    comparison = aVal.localeCompare(bVal, 'zh-CN');
-                }
-                
-                return currentDir === 'asc' ? comparison : -comparison;
-            });
-            
-            tbody.innerHTML = "";
-            rows.forEach(row => tbody.appendChild(row));
+        function renderModuleType(module) { return getStatusBadge(module.type); }
 
-            for (let i = 0; i < headers.length; i++) {
-                headers[i].classList.remove('sorted');
-                const arrow = headers[i].querySelector('.sort-arrow');
-                if (arrow) arrow.innerHTML = '';
+        function renderProgress(studentId, module) {
+            if (module.type === '讲义') {
+                const completed = module.completedPages || module.completed || 0;
+                const total = module.totalPages || module.total || 1;
+                return `<div class="flex items-center gap-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2"><div class="theme-purple-bg h-2 rounded-full" style="width: ${total > 0 ? (completed/total)*100 : 0}%"></div></div>
+                    <span class="text-xs text-gray-500 font-mono">${completed}/${total}</span>
+                </div>`;
+            } else if (module.type === '测验') {
+                if (module.status === '进行中') {
+                    if (activeTimers[studentId]) clearInterval(activeTimers[studentId]);
+                    let time = module.timeElapsed || 0;
+                    const timerId = setInterval(() => {
+                        time++;
+                        const timerEl = document.getElementById(`timer-${studentId}`);
+                        if (timerEl) timerEl.textContent = formatTime(time);
+                    }, 1000);
+                    activeTimers[studentId] = timerId;
+                    return `<div class="text-xs font-mono text-gray-600">用时: <span id="timer-${studentId}">${formatTime(time)}</span></div>`;
+                }
+                return `<span class="text-xs font-mono text-gray-500">${module.score || module.status}</span>`;
             }
+            return `<span class="text-xs font-mono text-gray-500">${module.status}</span>`;
+        }
+
+        function toggleExpand(btn) {
+            const mainTr = btn.closest('tr');
+            const expandRowDiv = mainTr.nextElementSibling.querySelector('.expand-row');
+            const studentId = mainTr.dataset.studentId;
             
-            const activeHeader = headers[n];
-            activeHeader.classList.add('sorted');
-            const arrowSpan = activeHeader.querySelector('.sort-arrow');
-            if (arrowSpan) {
-                arrowSpan.innerHTML = currentDir === 'asc' ? '<i data-lucide="arrow-up" class="w-4 h-4"></i>' : '<i data-lucide="arrow-down" class="w-4 h-4"></i>';
-                lucide.createIcons({ nodes: [arrowSpan] });
+            mainTr.classList.toggle('expanded');
+            const isExpanded = mainTr.classList.contains('expanded');
+
+            if (isExpanded) {
+                mainTr.dataset.viewedIndex = mockData.students.find(s=>s.id==studentId).courses[0].currentModuleIndex;
+                expandRowDiv.innerHTML = renderExpandedView(mainTr);
+                expandRowDiv.classList.add('expanded');
+                expandRowDiv.style.padding = '4px 0';
+                lucide.createIcons();
+            } else {
+                const student = mockData.students.find(s => s.id == studentId);
+                viewModule(studentId, student.courses[0].currentModuleIndex, false);
+                expandRowDiv.classList.remove('expanded');
+                expandRowDiv.style.padding = '0';
+                expandRowDiv.innerHTML = '';
             }
         }
         
-        /**
-         * Renders the tab buttons for the insights section.
-         */
-        function renderInsightTabs() {
-            const tabsContainer = document.getElementById('insight-tabs');
-            tabsContainer.innerHTML = `
-                <button onclick="changeTab(event, 'objective')" class="tab-button active">客观题 (${classData.questions.objective.length})</button>
-                <button onclick="changeTab(event, 'subjective')" class="tab-button">主观题 (${classData.questions.subjective.length})</button>
-                <button onclick="changeTab(event, 'discussion')" class="tab-button">讨论 (${classData.questions.discussion.length})</button>
+        function toggleAllRows(button) {
+            const rows = document.querySelectorAll('#roster-table-body tr[data-main-row]');
+            const isExpanding = button.querySelector('span').textContent === '全部展开';
+            rows.forEach(row => {
+                const isExpanded = row.classList.contains('expanded');
+                if (isExpanded !== isExpanding) {
+                    toggleExpand(row.querySelector('button'));
+                }
+            });
+            button.querySelector('span').textContent = isExpanding ? '全部收起' : '全部展开';
+        }
+
+        // --- EXPANDED VIEW & MODULE NAVIGATION ---
+        function renderExpandedView(mainTr) {
+            const studentId = mainTr.dataset.studentId;
+            const student = mockData.students.find(s => s.id == studentId);
+            const course = student.courses[0];
+            const viewedIndex = parseInt(mainTr.dataset.viewedIndex || course.currentModuleIndex);
+
+            const navSegments = course.modules.map((mod, index) => {
+                let navClass = '';
+                const unlearned = mod.status === '未开始' || mod.status === '未提交';
+                if (unlearned) {
+                    navClass = 'nav-unlearned';
+                } else if (mod.type === '讲义') {
+                    navClass = 'nav-lecture';
+                } else if (mod.type === '测验') {
+                    navClass = 'nav-test';
+                } else if (mod.type === '作业') {
+                    navClass = 'nav-assignment';
+                }
+                
+                let indicatorClasses = 'module-nav-segment ' + navClass;
+                if (index == course.currentModuleIndex) indicatorClasses += ' nav-current';
+                if (index == viewedIndex) indicatorClasses += ' nav-viewed';
+
+                return `<div class="${indicatorClasses}" onclick="viewModule(${studentId}, ${index})"></div>`;
+            }).join('');
+
+            return `
+                <div class="module-nav-wrapper">
+                    <div class="module-nav-container">${navSegments}</div>
+                    <button id="return-current-${studentId}" onclick="viewModule(${studentId}, ${course.currentModuleIndex})" class="ml-3 px-2 py-1 text-xs bg-white border rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-50" ${viewedIndex === course.currentModuleIndex ? 'disabled' : ''}>回到当前进度</button>
+                </div>
+                <div id="module-content-${studentId}" class="py-2">
+                    ${renderModuleContent(studentId, course.modules[viewedIndex])}
+                </div>
             `;
         }
-        
-        /**
-         * Renders all three tab content panes at once for robust toggling.
-         */
-        function renderAllInsightPanes() {
-            const contentContainer = document.getElementById('insight-content');
-            const totalStudents = classData.totalStudents;
-            let html = '';
 
-            const questionTypes = ['objective', 'subjective', 'discussion'];
-            questionTypes.forEach((type, index) => {
-                const isActive = index === 0 ? 'active' : '';
-                let listHtml = '';
+        function viewModule(studentId, moduleIndex, isInteractive = true) {
+            const student = mockData.students.find(s => s.id == studentId);
+            const course = student.courses[0];
+            const module = course.modules[moduleIndex];
+            const mainTr = document.querySelector(`tr[data-student-id='${studentId}']`);
+            if (!mainTr) return;
 
-                if (type === 'objective') {
-                    listHtml = classData.questions.objective.sort((a, b) => b.errorRate - a.errorRate).map(q => `
-                        <li onclick="showQuestionDetail('objective', ${q.id})" class="p-4 rounded-lg border hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition">
-                            <div class="flex justify-between items-center">
-                                <span class="flex items-center text-sm font-semibold text-red-600"><i data-lucide="check-square" class="w-4 h-4 mr-2"></i>错误率: ${q.errorRate}%</span>
-                                <span class="text-xs ${q.completed === totalStudents ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} px-2 py-1 rounded-full">完成: ${q.completed}/${totalStudents}</span>
-                            </div>
-                            <p class="font-medium text-gray-800 mt-2 pl-6">P${q.page} - ${q.title}</p>
-                        </li>`).join('');
-                } else if (type === 'subjective') {
-                     listHtml = classData.questions.subjective.map(q => `
-                        <li onclick="showQuestionDetail('subjective', ${q.id})" class="p-4 rounded-lg border hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition">
-                             <div class="flex justify-between items-center">
-                                 <span class="flex items-center text-sm font-semibold text-blue-600"><i data-lucide="message-square" class="w-4 h-4 mr-2"></i>平均耗时: ${q.avgTime}</span>
-                                 <span class="text-xs ${q.completed === totalStudents ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} px-2 py-1 rounded-full">完成: ${q.completed}/${totalStudents}</span>
-                            </div>
-                            <p class="font-medium text-gray-800 mt-2 pl-6">P${q.page} - ${q.title}</p>
-                        </li>`).join('');
-                } else if (type === 'discussion') {
-                     listHtml = classData.questions.discussion.sort((a,b) => a.avgWords - b.avgWords).map(q => `
-                        <li onclick="showQuestionDetail('discussion', ${q.id})" class="p-4 rounded-lg border hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition">
-                            <div class="flex justify-between items-center flex-wrap gap-2">
-                                <span class="flex items-center text-sm font-semibold ${q.avgWords < q.target ? 'text-red-600' : 'text-green-600'}"><i data-lucide="users" class="w-4 h-4 mr-2"></i>平均发言: ${q.avgWords}字</span>
-                                <span class="text-xs text-gray-500">平均耗时: ${q.avgTime}</span>
-                                <span class="text-xs ${q.completed === totalStudents ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} px-2 py-1 rounded-full">完成: ${q.completed}/${totalStudents}</span>
-                            </div>
-                            <p class="font-medium text-gray-800 mt-2 pl-6">P${q.page} - ${q.title}</p>
-                        </li>`).join('');
-                }
+            mainTr.dataset.viewedIndex = moduleIndex;
 
-                html += `<div id="${type}" class="tab-content ${isActive}"><ol class="space-y-3">${listHtml}</ol></div>`;
-            });
-            
-            contentContainer.innerHTML = html;
-            lucide.createIcons();
-        }
+            document.getElementById(`module-type-cell-${studentId}`).innerHTML = renderModuleType(module);
+            document.getElementById(`module-detail-cell-${studentId}`).textContent = module.name;
+            document.getElementById(`progress-cell-${studentId}`).innerHTML = renderProgress(studentId, module);
 
-        /**
-         * Handles the logic for switching tabs.
-         */
-        function changeTab(event, tabID) {
-            const tabContainer = document.getElementById('insight-content');
-            const tabButtons = document.querySelectorAll("#insight-tabs .tab-button");
-            
-            tabButtons.forEach(button => button.classList.remove('active'));
-            event.currentTarget.classList.add('active');
-            
-            const tabPanes = tabContainer.querySelectorAll('.tab-content');
-            tabPanes.forEach(pane => pane.classList.remove('active'));
-            document.getElementById(tabID).classList.add('active');
-        }
+            if (!isInteractive) return;
 
-        /**
-         * Renders the main progress distribution chart.
-         */
-        let progressChartInstance;
-        function renderProgressChart() {
-            const ctx = document.getElementById('progressChart');
-            if (!ctx) return;
-            if (progressChartInstance) {
-                progressChartInstance.destroy();
+            const contentDiv = document.getElementById(`module-content-${studentId}`);
+            if (contentDiv) {
+                contentDiv.innerHTML = renderModuleContent(studentId, module);
+                lucide.createIcons();
             }
 
-            // ✅ FIX: Replaced icons with text annotations
-            const originalLabels = classData.progressChart.labels;
-            const activityTypes = classData.progressChart.activityTypes;
-            const newLabels = originalLabels.map((label, index) => {
-                const activities = activityTypes[index] || [];
-                if (activities.length > 0) {
-                    // Shorten text ('测验题' -> '测验') and join with a comma
-                    const activityText = activities.map(type => type.replace('题', '')).join(', ');
-                    return `${label} (${activityText})`;
-                }
-                return label;
-            });
-
-            progressChartInstance = new Chart(ctx.getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: newLabels, // Use the new labels with text annotations
-                    datasets: [{
-                        label: '学生人数',
-                        data: classData.progressChart.values,
-                        backgroundColor: 'rgba(81, 45, 109, 0.6)',
-                        borderColor: 'rgba(81, 45, 109, 1)',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: { beginAtZero: true, title: { display: true, text: '学生人数' }, ticks: { stepSize: 1, precision: 0 }},
-                        x: { 
-                            grid: { display: false },
-                            ticks: {
-                                font: { size: 11 } // Slightly smaller font to prevent labels from overlapping
-                            }
-                        }
-                    }
-                }
-            });
-        }
-        
-        /**
-         * Navigation functions to switch between dashboard and student report.
-         */
-        function navigateToDashboard(){
-            document.getElementById('student-report-view').classList.add('hidden');
-            document.getElementById('dashboard-view').classList.remove('hidden');
-        }
-        function navigateToStudentReport(studentName){
-            document.getElementById('dashboard-view').classList.add('hidden');
-            document.getElementById('student-report-view').classList.remove('hidden');
-            populateStudentReport(studentName);
-            lucide.createIcons();
-        }
-
-        /**
-         * Populates the student report view with data for the selected student.
-         */
-        let studentTimeChartInstance;
-        function populateStudentReport(studentName){
-            const student = classData.students[studentName];
-            document.getElementById('student-report-name').textContent = `${studentName} 的学情报告`;
-            document.getElementById('student-report-name-main').textContent = studentName;
-            document.getElementById('student-report-progress').textContent = student.progress;
-            document.getElementById('student-report-score').textContent = student.score;
-            document.getElementById('student-report-time').textContent = student.totalTime;
-
-            const logContainer = document.getElementById('student-activity-log');
-            const allQuestions = [
-                ...classData.questions.objective.map(q => ({ ...q, baseType: 'objective' })),
-                ...classData.questions.subjective.map(q => ({ ...q, baseType: 'subjective' })),
-                ...classData.questions.discussion.map(q => ({ ...q, baseType: 'discussion' }))
-            ].sort((a, b) => a.page - b.page);
-
-            logContainer.innerHTML = allQuestions.map(q => {
-                const studentAnswer = student.activityLog.find(log => log.qId === q.id && log.type === q.baseType);
-                if (studentAnswer) {
-                    let resultClass = 'text-green-600', resultIcon = 'check', resultText = '回答正确';
-                    if (studentAnswer.result === 'incorrect') {
-                       resultClass = 'text-red-600'; resultIcon = 'x'; resultText = '回答错误';
-                    }
-                    if (q.baseType === 'discussion' || q.baseType === 'subjective') {
-                        resultClass = 'text-blue-600'; resultIcon = 'message-square'; resultText = '已完成';
-                    }
-                    
-                    let answerDetailsHtml = '';
-                    if (q.baseType === 'objective') {
-                        answerDetailsHtml = `<div class="text-sm mt-2 p-3 bg-gray-50 rounded-lg space-y-2"><div class="font-semibold text-gray-600">题目选项:</div><div class="text-gray-800 pl-2">${q.content}</div><div class="border-t my-2"></div><div><span class="font-semibold">你的回答:</span> <span class="font-mono p-1 rounded ${studentAnswer.result === 'correct' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${studentAnswer.studentAnswer}</span></div><div><span class="font-semibold">正确答案:</span> <span class="font-mono p-1 bg-gray-200 text-gray-800 rounded">${studentAnswer.correctAnswer}</span></div></div>`;
-                    } else if (q.baseType === 'subjective') {
-                         answerDetailsHtml = `<div class="text-sm mt-2 p-3 bg-gray-50 rounded-lg"><div class="font-semibold text-gray-600">你的回答:</div><div class="mt-1 text-gray-800">${studentAnswer.studentAnswer}</div></div>`;
-                    }
-
-                    return `<div class="p-4 rounded-lg border bg-white shadow-sm"><div class="flex justify-between items-start"><div class="flex-grow"><div class="flex justify-between items-center text-sm"><span class="font-semibold">P${q.page} - ${q.type}</span><span class="font-semibold ${resultClass} flex items-center"><i data-lucide="${resultIcon}" class="w-4 h-4 mr-1"></i>${resultText}</span></div><p class="font-medium text-gray-800 my-2">${q.title}</p></div></div>${answerDetailsHtml}<div class="text-xs text-gray-500 pt-2 text-right">耗时: ${studentAnswer.time}${studentAnswer.note ? ` (${studentAnswer.note})` : ''}${studentAnswer.wordCount ? ` | 字数: ${studentAnswer.wordCount}` : ''}</div></div>`;
-                } else {
-                    return `<div class="p-4 rounded-lg border border-dashed bg-gray-50"><div class="flex justify-between items-center text-sm"><span class="font-semibold">P${q.page} - ${q.type}</span><span class="font-semibold text-gray-500 flex items-center"><i data-lucide="circle-slash" class="w-4 h-4 mr-1"></i>未完成</span></div><p class="font-medium text-gray-600 my-2">${q.title}</p></div>`;
-                }
-            }).join('');
-            
-            if (studentTimeChartInstance) studentTimeChartInstance.destroy();
-            const timeChartCtx = document.getElementById('studentTimeChart');
-            if (timeChartCtx) {
-                studentTimeChartInstance = new Chart(timeChartCtx.getContext('2d'), {
-                    type: 'bar',
-                    data: {
-                        labels: classData.progressChart.labels.slice(0, student.timeDistribution.length),
-                        datasets: [{ label: '停留时间(分钟)', data: student.timeDistribution, backgroundColor: 'rgba(81, 45, 109, 0.6)' }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { title: { display: true, text: '分钟' } } } }
+            const navContainer = mainTr.nextElementSibling.querySelector('.module-nav-container');
+            if (navContainer) {
+                Array.from(navContainer.children).forEach((seg, i) => {
+                    seg.classList.toggle('nav-viewed', i === moduleIndex);
                 });
             }
+            
+            const returnBtn = document.getElementById(`return-current-${studentId}`);
+            if(returnBtn) {
+                returnBtn.disabled = (moduleIndex === course.currentModuleIndex);
+            }
+        }
+
+        function renderModuleContent(studentId, module) {
+            if (module.type === '讲义') return renderLectureTimeline(studentId, module);
+            if (module.type === '测验') return renderTestTimeline(studentId, module);
+            return `<div class="text-center text-gray-500 py-4">该模块无详细时间轴数据。</div>`;
+        }
+
+        function renderLectureTimeline(studentId, module) {
+            if (!module.modulePages || module.modulePages.length === 0) {
+                 return `<div class="text-center text-gray-500 py-4">该讲义无详细时间轴数据。</div>`;
+            }
+            let timelineHtml = module.modulePages.map((page, index) => {
+                const isLearned = page.time !== null && !page.time.includes('进行中');
+                const isCurrent = page.time !== null && page.time.includes('进行中');
+                const hasBeenReached = isLearned || isCurrent;
+                const mainActivity = page.activities[0];
+                
+                let contentHtml = '';
+                if (mainActivity) {
+                    let icon = 'file-question', color = 'text-gray-500';
+                    if (mainActivity.type === 'discussion_pending') {
+                        icon = 'messages-square';
+                        color = 'text-blue-600 font-bold';
+                    } else if (mainActivity.type === 'interactive_question' && hasBeenReached) {
+                          icon = 'check-square';
+                          color = mainActivity.result === 'correct' ? 'text-green-600 font-bold' : 'text-red-600 font-bold';
+                    }
+                    contentHtml = `<i data-lucide="${icon}" class="activity-icon ${color}"></i>`;
+                }
+                
+                const segmentClasses = ['timeline-segment'];
+                if (page.isAbnormal && hasBeenReached) {
+                    const hasIncorrectAnswer = page.activities && page.activities.some(a => a.result === 'incorrect');
+                    segmentClasses.push(hasIncorrectAnswer ? 'lecture-abnormal-incorrect' : 'lecture-abnormal-timeout');
+                }
+                else if (hasBeenReached) segmentClasses.push('lecture-learned');
+                if (isCurrent) segmentClasses.push('focused');
+                
+                const segmentStyle = isLearned ? `style="opacity: ${mapTimeToOpacity(page.timeValue)}"` : '';
+                return `<div class="${segmentClasses.join(' ')}" ${segmentStyle} onmouseover="showTooltip(event, ${studentId}, '${module.name}', ${index}, 'lecture')" onmouseleave="hideTooltip()">${contentHtml}</div>`;
+            }).join('');
+            return `<div class="timeline-container">${timelineHtml}</div>`;
+        }
+
+        function renderTestTimeline(studentId, module) {
+            if (!module.questions || module.questions.length === 0) {
+                return `<div class="text-center text-gray-500 py-4">该测验无详细时间轴数据。</div>`;
+            }
+            let timelineHtml = module.questions.map((q, index) => {
+                const segmentClasses = ['timeline-segment'];
+                if (module.status === '进行中') {
+                    segmentClasses.push(q.status === 'in_progress' ? 'test-inprogress-current' : 'test-inprogress-unanswered');
+                } else if (module.status === '已完成') {
+                    segmentClasses.push(q.result === 'correct' ? 'test-correct' : 'test-incorrect');
+                }
+                return `<div class="${segmentClasses.join(' ')}" onmouseover="showTooltip(event, ${studentId}, '${module.name}', ${index}, 'test')" onmouseleave="hideTooltip()"></div>`;
+            }).join('');
+            return `<div class="timeline-container">${timelineHtml}</div>`;
         }
         
-        /**
-         * Modal and other utility functions.
-         */
-        function showModal(modalId) { document.getElementById(modalId).classList.add('active'); }
-        function closeModal(modalId) { document.getElementById(modalId).classList.remove('active'); }
-        function showQuestionDetail(type, id) {
-            const detail = classData.questions[type].find(q => q.id === id);
-            const modalContent = `<div class="flex justify-between items-start"><h3 class="text-xl font-bold text-gray-800 mb-4">P${detail.page} - ${detail.title}</h3><button onclick="closeModal('questionModal')" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button></div><div class="text-gray-700 space-y-4"><p><strong>类型:</strong> ${detail.type}</p><div><strong>题干:</strong><div class="mt-1 p-3 bg-gray-50 rounded-lg">${detail.content}</div></div>${detail.correct ? `<p><strong>参考答案:</strong> ${detail.correct}</p>` : ''}${detail.stats ? `<div><strong>作答统计:</strong><div class="mt-1 p-3 bg-gray-50 rounded-lg">${detail.stats}</div></div>` : ''}</div>`;
-            document.querySelector('#questionModal .modal-container').innerHTML = modalContent;
-            showModal('questionModal');
+        // --- SORTING LOGIC ---
+        function sortStudents(key) {
+            if (sortState.key === key) {
+                sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortState.key = key;
+                sortState.direction = 'asc';
+            }
+
+            const sortedStudents = [...mockData.students].sort((a, b) => {
+                const moduleA = a.courses[0].modules[a.courses[0].currentModuleIndex];
+                const moduleB = b.courses[0].modules[b.courses[0].currentModuleIndex];
+                let valA, valB;
+
+                if (key === 'moduleDetail') {
+                    valA = moduleA.name;
+                    valB = moduleB.name;
+                } else if (key === 'progress') {
+                    valA = getProgressValue(moduleA);
+                    valB = getProgressValue(moduleB);
+                }
+
+                if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            renderRoster(sortedStudents);
         }
-        function filterStudents() {
-            const input = document.getElementById('studentSearch');
-            const filter = input.value.toUpperCase();
-            const table = document.getElementById('studentTable');
-            const trs = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
-            for (let i = 0; i < trs.length; i++) {
-                const td = trs[i].getElementsByTagName('td')[0];
-                if (td) {
-                    trs[i].style.display = (td.textContent.toUpperCase().indexOf(filter) > -1) ? "" : "none";
+
+        function getProgressValue(module) {
+            const completed = module.completedPages || module.completed || 0;
+            const total = module.totalPages || module.total || 1;
+            if (module.type === '讲义') {
+                return total > 0 ? completed / total : 0;
+            }
+            if (module.type === '测验') {
+                if (module.status === '已完成' && module.score) {
+                    const [score, totalScore] = module.score.split('/');
+                    return parseInt(score) / parseInt(totalScore);
+                }
+                if (module.status === '进行中' && module.questions) {
+                    const answered = module.questions.filter(q => q.status !== 'unanswered').length;
+                    return answered / module.questions.length * 0.9; // In-progress is valued less than completed
+                }
+                return 0;
+            }
+            if (module.type === '作业') {
+                return module.status === '已提交' ? 1 : 0;
+            }
+            return 0;
+        }
+
+        function updateSortIcons() {
+            document.querySelectorAll('.sortable-header').forEach(header => {
+                const key = header.getAttribute('onclick').match(/'(.*?)'/)[1];
+                const iconSpan = document.getElementById(`sort-icon-${key}`);
+                if (sortState.key === key) {
+                    header.classList.add('sorted');
+                    iconSpan.innerHTML = sortState.direction === 'asc' ? '<i data-lucide="arrow-up" class="w-3 h-3"></i>' : '<i data-lucide="arrow-down" class="w-3 h-3"></i>';
+                } else {
+                    header.classList.remove('sorted');
+                    iconSpan.innerHTML = '<i data-lucide="arrow-up-down" class="w-3 h-3"></i>';
+                }
+            });
+            lucide.createIcons();
+        }
+
+        // --- MODULE OVERVIEW LOGIC ---
+        function renderModuleOverview() {
+            const tbody = document.getElementById('module-overview-body');
+            if (!tbody) return;
+            let html = '';
+            mockData.students.forEach(student => {
+                student.courses.forEach(course => {
+                    html += `
+                        <tr class="roster-row">
+                            <td class="px-6 py-4 font-medium text-gray-900">${student.name}</td>
+                            <td class="px-6 py-4">${course.courseName}</td>
+                            <td class="px-6 py-4">
+                                <div class="module-progress-container">
+                                    ${renderModuleProgressBar(student.id, course.courseId)}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+            });
+            tbody.innerHTML = html;
+        }
+
+        function renderModuleProgressBar(studentId, courseId) {
+            const student = mockData.students.find(s => s.id === studentId);
+            const course = student.courses.find(c => c.courseId === courseId);
+            if (!course) return '';
+            
+            return course.modules.map((module, index) => {
+                const isCurrentModule = index === course.currentModuleIndex;
+                let typeClass = '';
+                let style = '';
+
+                if (module.status === '未开始' || module.status === '未提交') {
+                    typeClass = 'type-unstarted';
+                } else {
+                    switch(module.type) {
+                        case '讲义': typeClass = 'type-lecture'; break;
+                        case '测验': typeClass = 'type-test'; break;
+                        case '作业': typeClass = 'type-assignment'; break;
+                    }
+                    if (module.status === '进行中') {
+                        style = 'style="opacity: 0.6;"'; // In progress is less opaque
+                    }
+                }
+                
+                const segmentClasses = ['module-progress-segment', typeClass];
+                if (isCurrentModule) {
+                    segmentClasses.push('current-module');
+                }
+
+                return `
+                    <div class="${segmentClasses.join(' ')}" 
+                         ${style}
+                         onmouseover="showTooltip(event, ${studentId}, '${course.courseName}', ${index}, 'module-overview')" 
+                         onmouseleave="hideTooltip()">
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // --- STUDENT DETAIL VIEW LOGIC ---
+        function showDetailView(studentId) {
+            const student = mockData.students.find(s => s.id === studentId);
+            if (!student) return;
+
+            const detailView = document.getElementById('detail-view');
+            
+            // Calculate summary stats
+            let totalLearningTime = 0;
+            let totalCorrect = 0;
+            let totalQuestions = 0;
+            let abnormalEventsCount = student.events.filter(e => e.type === 'abnormal').length;
+            
+            student.courses.forEach(c => {
+                c.modules.forEach(m => {
+                    totalLearningTime += m.timeSpent;
+                    if (m.type === '测验' && m.questions) {
+                        totalCorrect += m.questions.filter(q => q.result === 'correct').length;
+                        totalQuestions += m.questions.length;
+                    }
+                });
+            });
+            const avgCorrectness = totalQuestions > 0 ? ((totalCorrect / totalQuestions) * 100).toFixed(1) : 'N/A';
+
+            let detailHtml = `
+                <div class="p-3 md:p-6 bg-white rounded-xl shadow-sm">
+                    <header class="flex flex-wrap justify-between items-center mb-6 gap-4">
+                        <div class="flex items-center gap-4">
+                            <img src="https://placehold.co/64x64/8b5cf6/ffffff?text=${student.name.charAt(0)}" class="rounded-full" alt="avatar">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-800">${student.name} - 学习报告</h1>
+                                <p class="text-sm text-gray-500">数据更新于: ${new Date().toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <button onclick="switchView('roster-view', 'roster-view-btn')" class="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"><i data-lucide="arrow-left" class="w-4 h-4"></i>返回总览</button>
+                    </header>
+
+                    <!-- Summary Stats -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div class="stat-card text-center"><p class="text-sm text-gray-500">总学习时长</p><p class="text-2xl font-bold text-purple-600">${formatTime(totalLearningTime)}</p></div>
+                        <div class="stat-card text-center"><p class="text-sm text-gray-500">课程完成度</p><p class="text-2xl font-bold text-purple-600">${student.courses.length > 0 ? '1/' + student.courses.length : 'N/A'}</p></div>
+                        <div class="stat-card text-center"><p class="text-sm text-gray-500">平均正确率</p><p class="text-2xl font-bold text-purple-600">${avgCorrectness}%</p></div>
+                        <div class="stat-card text-center"><p class="text-sm text-gray-500">异常行为</p><p class="text-2xl font-bold text-red-500">${abnormalEventsCount}</p></div>
+                    </div>
+
+                    <!-- Course Details -->
+                    <div class="space-y-4 mb-6">
+                        ${student.courses.map(course => `
+                            <div class="card p-4">
+                                <h3 class="font-bold text-lg mb-2">${course.courseName}</h3>
+                                <div class="module-progress-container mb-4">
+                                    ${renderModuleProgressBar(student.id, course.courseId)}
+                                </div>
+                                <div class="flex justify-end gap-2">
+                                    ${course.modules.some(m => m.type === '测验' && m.status !== '未开始') ? `<button onclick="showModal('quiz', ${student.id}, ${course.courseId})" class="text-xs px-3 py-1 bg-teal-100 text-teal-800 rounded-md hover:bg-teal-200">查看测验详情</button>` : ''}
+                                    ${course.modules.some(m => m.type === '讲义' && m.modulePages && m.modulePages.some(p => p.activities.some(a => a.type === 'discussion_pending'))) ? `<button onclick="showModal('discussion', ${student.id}, ${course.courseId})" class="text-xs px-3 py-1 bg-sky-100 text-sky-800 rounded-md hover:bg-sky-200">查看讨论详情</button>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <!-- Event Log -->
+                    <div class="card p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-bold text-lg">学习日志</h3>
+                            <div class="flex gap-2">
+                                <button onclick="filterEvents(${student.id}, 'all', this)" class="event-filter-btn active text-xs px-3 py-1 bg-purple-100 text-purple-800 rounded-md">全部</button>
+                                <button onclick="filterEvents(${student.id}, 'abnormal', this)" class="event-filter-btn text-xs px-3 py-1 bg-gray-100 text-gray-800 rounded-md">只看异常</button>
+                                <button onclick="filterEvents(${student.id}, 'interaction', this)" class="event-filter-btn text-xs px-3 py-1 bg-gray-100 text-gray-800 rounded-md">只看互动</button>
+                            </div>
+                        </div>
+                        <ul id="event-log-list" class="space-y-2 text-sm">
+                            ${student.events.map(event => `<li data-event-type="${event.type}" class="flex gap-4"><span class="text-gray-500">${event.ts}</span><span class="${event.type === 'abnormal' ? 'text-red-600' : 'text-gray-700'}">${event.text}</span></li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+
+            detailView.innerHTML = detailHtml;
+            lucide.createIcons();
+            switchView('detail-view');
+        }
+
+        function filterEvents(studentId, type, btn) {
+            document.querySelectorAll('.event-filter-btn').forEach(b => {
+                b.classList.remove('active', 'bg-purple-100', 'text-purple-800');
+                b.classList.add('bg-gray-100', 'text-gray-800');
+            });
+            btn.classList.add('active', 'bg-purple-100', 'text-purple-800');
+            btn.classList.remove('bg-gray-100', 'text-gray-800');
+            
+            const eventList = document.getElementById('event-log-list');
+            eventList.querySelectorAll('li').forEach(li => {
+                if(type === 'all' || li.dataset.eventType === type) {
+                    li.style.display = 'flex';
+                } else {
+                    li.style.display = 'none';
+                }
+            });
+        }
+
+        // --- MODAL LOGIC ---
+        function showModal(type, studentId, courseId) {
+            const student = mockData.students.find(s => s.id === studentId);
+            const course = student.courses.find(c => c.courseId === courseId);
+            const modalContainer = document.getElementById('modal-container');
+            let modalContent = '';
+
+            if (type === 'quiz') {
+                const quizModules = course.modules.filter(m => m.type === '测验' && m.status !== '未开始');
+                let quizHtml = quizModules.map(quiz => `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-md border-b pb-1 mb-2">${quiz.name}</h4>
+                        <ul class="space-y-2 text-sm">
+                        ${quiz.questions.filter(q => q.status === 'answered').map(q => `
+                            <li class="p-2 rounded-md ${q.result === 'correct' ? 'bg-green-50' : 'bg-red-50'}">
+                                <p class="font-medium">${q.q}. ${q.text}</p>
+                                <p class="text-xs text-gray-600">你的答案: (一些示例答案) - <span class="${q.result === 'correct' ? 'text-green-700' : 'text-red-700'}">${q.result === 'correct' ? '正确' : '错误'}</span></p>
+                            </li>
+                        `).join('')}
+                        </ul>
+                    </div>
+                `).join('');
+                modalContent = `<div><h3 class="text-xl font-bold mb-4">测验详情</h3>${quizHtml}</div>`;
+            } else if (type === 'discussion') {
+                const discussionModules = course.modules.filter(m => m.modulePages && m.modulePages.some(p => p.activities.some(a => a.type === 'discussion_pending')));
+                let discussionHtml = discussionModules.map(mod => {
+                    const activity = mod.modulePages.flatMap(p => p.activities).find(a => a.type === 'discussion_pending');
+                    return `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-md border-b pb-1 mb-2">${mod.name}</h4>
+                        <div class="grid grid-cols-3 gap-4 text-center">
+                            <div><p class="text-sm text-gray-500">参与时长</p><p class="font-bold text-lg">${formatTime(activity.discussionTime)}</p></div>
+                            <div><p class="text-sm text-gray-500">发言次数</p><p class="font-bold text-lg">${activity.posts}</p></div>
+                            <div><p class="text-sm text-gray-500">总字数</p><p class="font-bold text-lg">${activity.wordCount}</p></div>
+                        </div>
+                    </div>
+                    `
+                }).join('');
+                 modalContent = `<div><h3 class="text-xl font-bold mb-4">讨论详情</h3>${discussionHtml}</div>`;
+            }
+
+            modalContainer.innerHTML = `
+                <div id="modal-overlay" class="modal-overlay" onclick="closeModal()">
+                    <div class="modal-content" onclick="event.stopPropagation()">
+                        ${modalContent}
+                        <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800"><i data-lucide="x" class="w-6 h-6"></i></button>
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+        
+        function closeModal() {
+            const modalContainer = document.getElementById('modal-container');
+            modalContainer.innerHTML = '';
+        }
+
+
+        // --- SHARED LOGIC (Tooltip & Filter) ---
+        function showTooltip(event, studentId, name, itemIndex, type) {
+            const student = mockData.students.find(s => s.id == studentId);
+            if (!student) return;
+            
+            const tooltipElement = document.getElementById('globalTooltip');
+            let content = '';
+            let moduleData;
+
+            if (type === 'module-overview') {
+                const course = student.courses.find(c => c.courseName === name);
+                moduleData = course.modules[itemIndex];
+                content = `
+                    <div class="font-bold">${moduleData.name}</div>
+                    <div class="text-xs text-gray-300 mt-1">类型: ${moduleData.type}</div>
+                    <div class="text-xs text-gray-300">状态: ${moduleData.status}</div>
+                    <div class="text-xs text-gray-300">学习时长: ${formatTime(moduleData.timeSpent)}</div>
+                `;
+                if(moduleData.score) {
+                    content += `<div class="text-xs text-gray-300">得分: ${moduleData.score}</div>`;
+                }
+
+            } else { // Existing logic for roster timeline
+                const course = student.courses[0];
+                moduleData = course.modules.find(m => m.name === name);
+                if (!moduleData) return;
+                
+                if (type === 'lecture') {
+                    const page = moduleData.modulePages[itemIndex];
+                    const hasBeenReached = (page.time !== null && !page.time.includes('进行中')) || (page.time !== null && page.time.includes('进行中'));
+                    
+                    let activityHtml = '';
+                    if (page.activities.length > 0) {
+                        const activity = page.activities[0];
+                        let resultText = activity.type === 'discussion_pending' ? '<span class="text-sky-400">待参与</span>' : '<span class="text-gray-400">未作答</span>';
+                        if(hasBeenReached && activity.result) {
+                            switch(activity.result) { 
+                                case 'correct': resultText = '<span class="text-green-400">正确</span>'; break; 
+                                case 'incorrect': resultText = `<span class="text-red-400">错误</span>`; break; 
+                                case 'completed': resultText = '<span class="text-blue-400">已完成</span>'; break; 
+                            }
+                        }
+                        activityHtml = `<div class="tooltip-activity"><div class="font-semibold text-gray-300 capitalize">${getActivityTypeName(activity.type)}</div><p class="text-xs text-gray-400 mt-1">${activity.content || ''}</p><div class="text-xs mt-2">状态: ${resultText}</div></div>`;
+                    }
+                    content = `<div class="font-bold">P${page.page} - ${page.title}</div><div class="text-xs text-gray-300 mt-1">停留: ${page.time || '未开始'}</div><div class="text-xs text-gray-300">发言: ${page.chatCount}条</div>${activityHtml}`;
+                } else if (type === 'test') {
+                    const question = moduleData.questions[itemIndex];
+                    let statusText = '未作答';
+                    if (moduleData.status === '进行中') {
+                        if (question.status === 'in_progress') statusText = '<span class="text-blue-400">正在作答</span>';
+                    } else if (moduleData.status === '已完成') {
+                        statusText = `已回答 (<span class="${question.result === 'correct' ? 'text-green-400' : 'text-red-400'}">${question.result === 'correct' ? '正确' : '错误'}</span>)`;
+                    }
+                    content = `<div class="font-bold">第 ${question.q} 题</div><div class="text-xs text-gray-300 mt-1">状态: ${statusText}</div>`;
                 }
             }
+
+
+            tooltipElement.innerHTML = content;
+            tooltipElement.style.visibility = 'visible';
+            tooltipElement.style.opacity = '1';
+
+            const { top, left, width, bottom } = event.currentTarget.getBoundingClientRect();
+            const tooltipRect = tooltipElement.getBoundingClientRect();
+            let newTop = top - tooltipRect.height - 8;
+            let newLeft = left + (width / 2) - (tooltipRect.width / 2);
+            if (newLeft < 8) newLeft = 8;
+            if (newLeft + tooltipRect.width > window.innerWidth - 8) newLeft = window.innerWidth - tooltipRect.width - 8;
+            if (newTop < 8) newTop = bottom + 8;
+            tooltipElement.style.top = `${newTop}px`;
+            tooltipElement.style.left = `${newLeft}px`;
+        }
+
+        function hideTooltip() { 
+            const tooltipElement = document.getElementById('globalTooltip');
+            tooltipElement.style.visibility = 'hidden'; 
+            tooltipElement.style.opacity = '0'; 
+        }
+
+        function filterRoster() {
+            const filter = document.getElementById('studentSearchRoster').value.toUpperCase();
+            document.querySelectorAll('#roster-table-body tr[data-main-row]').forEach(mainRow => {
+                const expandRow = mainRow.nextElementSibling;
+                const name = mainRow.cells[1].textContent.toUpperCase();
+                const shouldShow = name.includes(filter);
+                mainRow.style.display = shouldShow ? "" : "none";
+                expandRow.style.display = shouldShow ? "" : "none";
+            });
         }
     </script>
 </body>
 </html>
+
